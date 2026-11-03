@@ -10,7 +10,9 @@ import {
   RoleMaster,
   UserRoleMapping,
   ExpenseMaster,
+  QuotationMaster,
   NavTab,
+  ThemeMode,
 } from '../types/erp';
 import {
   initialClients,
@@ -23,14 +25,20 @@ import {
   initialRoles,
   initialUserRoleMappings,
   initialExpenses,
+  initialQuotations,
 } from '../data/seedData';
+import { exportExpensesCSV, downloadFile } from '../services/api';
 
 interface ERPContextType {
-  // Navigation & Preferences
+  // Navigation, Theme & Auth
   activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   currency: string;
-  setCurrency: (c: string) => void;
+  themeMode: ThemeMode;
+  toggleThemeMode: () => void;
+  isAuthenticated: boolean;
+  login: (user: UserMaster) => void;
+  logout: () => void;
   currentUser: UserMaster;
   setCurrentUser: (user: UserMaster) => void;
 
@@ -45,6 +53,7 @@ interface ERPContextType {
   roles: RoleMaster[];
   userRoles: UserRoleMapping[];
   expenses: ExpenseMaster[];
+  quotations: QuotationMaster[];
 
   // Client CRUD (Auto-increment ID)
   addClient: (client: Omit<ClientMaster, 'id'>) => ClientMaster;
@@ -95,6 +104,12 @@ interface ERPContextType {
   updateExpense: (expense: ExpenseMaster) => void;
   deleteExpense: (expenseId: number) => void;
 
+  // Quotation CRUD (Auto-increment ID)
+  addQuotation: (q: Omit<QuotationMaster, 'id'>) => QuotationMaster;
+  updateQuotation: (q: QuotationMaster) => void;
+  deleteQuotation: (quotationId: number) => void;
+  getQuotation: (id?: number) => QuotationMaster | undefined;
+
   // Relational Lookups & Computations
   getClient: (id?: number) => ClientMaster | undefined;
   getProject: (id?: number) => ProjectMaster | undefined;
@@ -107,12 +122,23 @@ interface ERPContextType {
   getUserRoles: (userId: number) => RoleMaster[];
   getProjectExpenses: (projectId: number) => ExpenseMaster[];
   getProjectSpent: (projectId: number) => number;
-  getVendorSpent: (vendorId: number) => { total: number; paid: number; unpaid: number };
+  getVendorSpent: (vendorId: number) => number;
 
-  // Data Actions
+  // Export / Import / Download Tools
+  downloadExpensesCSV: () => void;
   resetToSampleData: () => void;
   exportDatabaseJSON: () => string;
-  importDatabaseJSON: (jsonStr: string) => boolean;
+  importDatabaseJSON: (json: string) => boolean;
+
+  // Bulk Import for All Masters
+  bulkImportClients: (newClients: Omit<ClientMaster, 'id'>[]) => number;
+  bulkImportProjects: (newProjects: Omit<ProjectMaster, 'id'>[]) => number;
+  bulkImportVendors: (newVendors: Omit<VendorMaster, 'id'>[]) => number;
+  bulkImportItems: (newItems: Omit<ItemMaster, 'id'>[]) => number;
+  bulkImportItemTypes: (newItemTypes: Omit<ItemTypeMaster, 'id'>[]) => number;
+  bulkImportCategories: (newCats: Omit<ExpenseCategoryMaster, 'id'>[]) => number;
+  bulkImportExpenses: (newExpenses: Omit<ExpenseMaster, 'id'>[]) => number;
+  bulkImportQuotations: (newQuotations: Omit<QuotationMaster, 'id'>[]) => number;
 }
 
 const STORAGE_KEY = 'PROJECT_CODE_TRACKER_V1';
@@ -121,7 +147,7 @@ const ERPContext = createContext<ERPContextType | undefined>(undefined);
 
 export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
-  const [currency, setCurrency] = useState<string>('₹');
+  const currency = '₹'; // Fixed Rupee currency as requested
 
   const loadStored = <T,>(key: string, defaultVal: T): T => {
     try {
@@ -132,6 +158,36 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Theme state
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_theme`);
+      return saved === 'light' ? 'light' : 'dark';
+    } catch {
+      return 'dark';
+    }
+  });
+
+  const toggleThemeMode = () => {
+    setThemeMode((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem(`${STORAGE_KEY}_theme`, next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (themeMode === 'light') {
+      root.classList.add('light');
+      root.setAttribute('data-theme', 'light');
+    } else {
+      root.classList.remove('light');
+      root.setAttribute('data-theme', 'dark');
+    }
+  }, [themeMode]);
+
+  // Master Data States
   const [clients, setClients] = useState<ClientMaster[]>(() => loadStored('clients', initialClients));
   const [projects, setProjects] = useState<ProjectMaster[]>(() => loadStored('projects', initialProjects));
   const [itemTypes, setItemTypes] = useState<ItemTypeMaster[]>(() => loadStored('itemTypes', initialItemTypes));
@@ -146,7 +202,35 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadStored('userRoles', initialUserRoleMappings)
   );
   const [expenses, setExpenses] = useState<ExpenseMaster[]>(() => loadStored('expenses', initialExpenses));
-  const [currentUser, setCurrentUser] = useState<UserMaster>(() => users[0] || initialUsers[0]);
+  const [quotations, setQuotations] = useState<QuotationMaster[]>(() =>
+    loadStored('quotations', initialQuotations)
+  );
+
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(`${STORAGE_KEY}_auth`) === 'true';
+    } catch {
+      return true; // default logged in for immediate demo usability
+    }
+  });
+
+  const [currentUser, setCurrentUser] = useState<UserMaster>(() => {
+    const savedUser = loadStored<UserMaster | null>('currentUser', null);
+    return savedUser || users[0] || initialUsers[0];
+  });
+
+  const login = (user: UserMaster) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    localStorage.setItem(`${STORAGE_KEY}_auth`, 'true');
+    localStorage.setItem(`${STORAGE_KEY}_currentUser`, JSON.stringify(user));
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    localStorage.setItem(`${STORAGE_KEY}_auth`, 'false');
+  };
 
   // Sync state to local storage
   useEffect(() => {
@@ -161,10 +245,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(`${STORAGE_KEY}_roles`, JSON.stringify(roles));
       localStorage.setItem(`${STORAGE_KEY}_userRoles`, JSON.stringify(userRoles));
       localStorage.setItem(`${STORAGE_KEY}_expenses`, JSON.stringify(expenses));
+      localStorage.setItem(`${STORAGE_KEY}_quotations`, JSON.stringify(quotations));
     } catch (e) {
       console.warn('LocalStorage save failed', e);
     }
-  }, [clients, projects, itemTypes, items, expenseCategories, vendors, users, roles, userRoles, expenses]);
+  }, [clients, projects, itemTypes, items, expenseCategories, vendors, users, roles, userRoles, expenses, quotations]);
 
   // Client CRUD
   const addClient = (c: Omit<ClientMaster, 'id'>): ClientMaster => {
@@ -195,42 +280,42 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Item Type CRUD
-  const addItemType = (t: Omit<ItemTypeMaster, 'id'>): ItemTypeMaster => {
+  const addItemType = (it: Omit<ItemTypeMaster, 'id'>): ItemTypeMaster => {
     const nextId = Math.max(0, ...itemTypes.map((item) => item.id)) + 1;
-    const newType: ItemTypeMaster = { ...t, id: nextId };
-    setItemTypes((prev) => [newType, ...prev]);
-    return newType;
+    const newItemType: ItemTypeMaster = { ...it, id: nextId };
+    setItemTypes((prev) => [...prev, newItemType]);
+    return newItemType;
   };
-  const updateItemType = (t: ItemTypeMaster) => {
-    setItemTypes((prev) => prev.map((item) => (item.id === t.id ? t : item)));
+  const updateItemType = (it: ItemTypeMaster) => {
+    setItemTypes((prev) => prev.map((item) => (item.id === it.id ? it : item)));
   };
   const deleteItemType = (id: number) => {
     setItemTypes((prev) => prev.filter((item) => item.id !== id));
   };
 
   // Item CRUD
-  const addItem = (itm: Omit<ItemMaster, 'id'>): ItemMaster => {
+  const addItem = (i: Omit<ItemMaster, 'id'>): ItemMaster => {
     const nextId = Math.max(0, ...items.map((item) => item.id)) + 1;
-    const newItem: ItemMaster = { ...itm, id: nextId };
+    const newItem: ItemMaster = { ...i, id: nextId };
     setItems((prev) => [newItem, ...prev]);
     return newItem;
   };
-  const updateItem = (itm: ItemMaster) => {
-    setItems((prev) => prev.map((item) => (item.id === itm.id ? itm : item)));
+  const updateItem = (i: ItemMaster) => {
+    setItems((prev) => prev.map((item) => (item.id === i.id ? i : item)));
   };
   const deleteItem = (id: number) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
   // Expense Category CRUD
-  const addExpenseCategory = (cat: Omit<ExpenseCategoryMaster, 'id'>): ExpenseCategoryMaster => {
+  const addExpenseCategory = (ec: Omit<ExpenseCategoryMaster, 'id'>): ExpenseCategoryMaster => {
     const nextId = Math.max(0, ...expenseCategories.map((item) => item.id)) + 1;
-    const newCat: ExpenseCategoryMaster = { ...cat, id: nextId };
-    setExpenseCategories((prev) => [newCat, ...prev]);
+    const newCat: ExpenseCategoryMaster = { ...ec, id: nextId };
+    setExpenseCategories((prev) => [...prev, newCat]);
     return newCat;
   };
-  const updateExpenseCategory = (cat: ExpenseCategoryMaster) => {
-    setExpenseCategories((prev) => prev.map((item) => (item.id === cat.id ? cat : item)));
+  const updateExpenseCategory = (ec: ExpenseCategoryMaster) => {
+    setExpenseCategories((prev) => prev.map((item) => (item.id === ec.id ? ec : item)));
   };
   const deleteExpenseCategory = (id: number) => {
     setExpenseCategories((prev) => prev.filter((item) => item.id !== id));
@@ -254,7 +339,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addUser = (u: Omit<UserMaster, 'id'>): UserMaster => {
     const nextId = Math.max(0, ...users.map((item) => item.id)) + 1;
     const newUser: UserMaster = { ...u, id: nextId };
-    setUsers((prev) => [newUser, ...prev]);
+    setUsers((prev) => [...prev, newUser]);
     return newUser;
   };
   const updateUser = (u: UserMaster) => {
@@ -268,7 +353,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addRole = (r: Omit<RoleMaster, 'id'>): RoleMaster => {
     const nextId = Math.max(0, ...roles.map((item) => item.id)) + 1;
     const newRole: RoleMaster = { ...r, id: nextId };
-    setRoles((prev) => [newRole, ...prev]);
+    setRoles((prev) => [...prev, newRole]);
     return newRole;
   };
   const updateRole = (r: RoleMaster) => {
@@ -280,70 +365,99 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // User Role Mapping
   const assignUserRole = (userId: number, roleId: number) => {
-    const existing = userRoles.find((ur) => ur.user_id === userId && ur.role_id === roleId);
-    if (existing) return;
+    const exists = userRoles.some((urm) => urm.user_id === userId && urm.role_id === roleId);
+    if (exists) return;
     const nextId = Math.max(0, ...userRoles.map((item) => item.id)) + 1;
-    const newMapping: UserRoleMapping = {
+    const mapping: UserRoleMapping = {
       id: nextId,
       user_id: userId,
       role_id: roleId,
       assigned_by: currentUser.id,
       created_at: new Date().toISOString(),
     };
-    setUserRoles((prev) => [newMapping, ...prev]);
+    setUserRoles((prev) => [...prev, mapping]);
   };
   const removeUserRole = (mappingId: number) => {
-    setUserRoles((prev) => prev.filter((item) => item.id !== mappingId));
+    setUserRoles((prev) => prev.filter((urm) => urm.id !== mappingId));
   };
 
   // Expense CRUD
-  const addExpense = (exp: Omit<ExpenseMaster, 'id'>): ExpenseMaster => {
+  const addExpense = (e: Omit<ExpenseMaster, 'id'>): ExpenseMaster => {
     const nextId = Math.max(0, ...expenses.map((item) => item.id)) + 1;
-    const newExpense: ExpenseMaster = { ...exp, id: nextId };
+    const newExpense: ExpenseMaster = { ...e, id: nextId };
     setExpenses((prev) => [newExpense, ...prev]);
     return newExpense;
   };
-  const updateExpense = (exp: ExpenseMaster) => {
-    setExpenses((prev) => prev.map((item) => (item.id === exp.id ? exp : item)));
+  const updateExpense = (e: ExpenseMaster) => {
+    setExpenses((prev) => prev.map((item) => (item.id === e.id ? e : item)));
   };
   const deleteExpense = (id: number) => {
     setExpenses((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // Lookups
-  const getClient = (id?: number) => clients.find((c) => c.id === id);
-  const getProject = (id?: number) => projects.find((p) => p.id === id);
-  const getItemType = (id?: number) => itemTypes.find((t) => t.id === id);
-  const getItem = (id?: number) => items.find((i) => i.id === id);
-  const getExpenseCategory = (id?: number) => expenseCategories.find((c) => c.id === id);
-  const getVendor = (id?: number) => vendors.find((v) => v.id === id);
-  const getUser = (id?: number) => users.find((u) => u.id === id);
-  const getRole = (id?: number) => roles.find((r) => r.id === id);
-
-  const getUserRoles = (userId: number): RoleMaster[] => {
-    const mappings = userRoles.filter((m) => m.user_id === userId);
-    return mappings
-      .map((m) => roles.find((r) => r.id === m.role_id))
-      .filter((r): r is RoleMaster => Boolean(r));
+  // Quotation CRUD
+  const addQuotation = (q: Omit<QuotationMaster, 'id'>): QuotationMaster => {
+    const nextId = Math.max(0, ...quotations.map((item) => item.id)) + 1;
+    const newQuotation: QuotationMaster = { ...q, id: nextId };
+    setQuotations((prev) => [newQuotation, ...prev]);
+    return newQuotation;
+  };
+  const updateQuotation = (q: QuotationMaster) => {
+    setQuotations((prev) => prev.map((item) => (item.id === q.id ? q : item)));
+  };
+  const deleteQuotation = (id: number) => {
+    setQuotations((prev) => prev.filter((item) => item.id !== id));
+  };
+  const getQuotation = (id?: number) => {
+    if (!id) return undefined;
+    return quotations.find((q) => q.id === id);
   };
 
-  const getProjectExpenses = (projectId: number) =>
-    expenses.filter((e) => e.project_id === projectId);
+  // Relational Lookups
+  const getClient = (id?: number) => (id ? clients.find((c) => c.id === id) : undefined);
+  const getProject = (id?: number) => (id ? projects.find((p) => p.id === id) : undefined);
+  const getItemType = (id?: number) => (id ? itemTypes.find((it) => it.id === id) : undefined);
+  const getItem = (id?: number) => (id ? items.find((i) => i.id === id) : undefined);
+  const getExpenseCategory = (id?: number) =>
+    id ? expenseCategories.find((cat) => cat.id === id) : undefined;
+  const getVendor = (id?: number) => (id ? vendors.find((v) => v.id === id) : undefined);
+  const getUser = (id?: number) => (id ? users.find((u) => u.id === id) : undefined);
+  const getRole = (id?: number) => (id ? roles.find((r) => r.id === id) : undefined);
 
-  const getProjectSpent = (projectId: number) => {
+  const getUserRoles = (userId: number): RoleMaster[] => {
+    const mappingRoleIds = userRoles
+      .filter((urm) => urm.user_id === userId)
+      .map((urm) => urm.role_id);
+    return roles.filter((r) => mappingRoleIds.includes(r.id));
+  };
+
+  const getProjectExpenses = (projectId: number): ExpenseMaster[] => {
+    return expenses.filter((e) => e.project_id === projectId);
+  };
+
+  const getProjectSpent = (projectId: number): number => {
     return expenses
       .filter((e) => e.project_id === projectId)
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   };
 
-  const getVendorSpent = (vendorId: number) => {
-    const vendorExps = expenses.filter((e) => e.vendor_id === vendorId);
-    const total = vendorExps.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const paid = vendorExps
-      .filter((e) => e.payment_status === 'Paid')
+  const getVendorSpent = (vendorId: number): number => {
+    return expenses
+      .filter((e) => e.vendor_id === vendorId)
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-    const unpaid = total - paid;
-    return { total, paid, unpaid };
+  };
+
+  // Direct CSV download for expenses
+  const downloadExpensesCSV = () => {
+    const csvContent = exportExpensesCSV(
+      expenses,
+      getProject,
+      getExpenseCategory,
+      getVendor,
+      getUser
+    );
+    const dateStr = new Date().toISOString().split('T')[0];
+    downloadFile(csvContent, `Project_Code_Tracker_Expenses_${dateStr}.csv`);
   };
 
   const resetToSampleData = () => {
@@ -357,30 +471,34 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRoles(initialRoles);
     setUserRoles(initialUserRoleMappings);
     setExpenses(initialExpenses);
-    setCurrentUser(initialUsers[0]);
+    setQuotations(initialQuotations);
   };
 
-  const exportDatabaseJSON = () => {
-    const dbDump = {
-      version: '1.0',
-      exportedAt: new Date().toISOString(),
-      clients,
-      projects,
-      itemTypes,
-      items,
-      expenseCategories,
-      vendors,
-      users,
-      roles,
-      userRoles,
-      expenses,
-    };
-    return JSON.stringify(dbDump, null, 2);
+  const exportDatabaseJSON = (): string => {
+    return JSON.stringify(
+      {
+        version: '1.0',
+        exportedAt: new Date().toISOString(),
+        clients,
+        projects,
+        itemTypes,
+        items,
+        expenseCategories,
+        vendors,
+        users,
+        roles,
+        userRoles,
+        expenses,
+        quotations,
+      },
+      null,
+      2
+    );
   };
 
-  const importDatabaseJSON = (jsonStr: string): boolean => {
+  const importDatabaseJSON = (jsonString: string): boolean => {
     try {
-      const data = JSON.parse(jsonStr);
+      const data = JSON.parse(jsonString);
       if (Array.isArray(data.clients)) setClients(data.clients);
       if (Array.isArray(data.projects)) setProjects(data.projects);
       if (Array.isArray(data.itemTypes)) setItemTypes(data.itemTypes);
@@ -391,11 +509,92 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (Array.isArray(data.roles)) setRoles(data.roles);
       if (Array.isArray(data.userRoles)) setUserRoles(data.userRoles);
       if (Array.isArray(data.expenses)) setExpenses(data.expenses);
+      if (Array.isArray(data.quotations)) setQuotations(data.quotations);
       return true;
-    } catch (e) {
-      console.error('Import failed', e);
+    } catch (err) {
+      console.error('Import failed', err);
       return false;
     }
+  };
+
+  const bulkImportClients = (newClients: Omit<ClientMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...clients.map((c) => c.id)) + 1;
+    const records: ClientMaster[] = newClients.map((c) => ({
+      ...c,
+      id: nextId++,
+    }));
+    setClients((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportProjects = (newProjects: Omit<ProjectMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...projects.map((p) => p.id)) + 1;
+    const records: ProjectMaster[] = newProjects.map((p) => ({
+      ...p,
+      id: nextId++,
+    }));
+    setProjects((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportVendors = (newVendors: Omit<VendorMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...vendors.map((v) => v.id)) + 1;
+    const records: VendorMaster[] = newVendors.map((v) => ({
+      ...v,
+      id: nextId++,
+    }));
+    setVendors((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportItems = (newItems: Omit<ItemMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...items.map((i) => i.id)) + 1;
+    const records: ItemMaster[] = newItems.map((i) => ({
+      ...i,
+      id: nextId++,
+    }));
+    setItems((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportItemTypes = (newItemTypes: Omit<ItemTypeMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...itemTypes.map((it) => it.id)) + 1;
+    const records: ItemTypeMaster[] = newItemTypes.map((it) => ({
+      ...it,
+      id: nextId++,
+    }));
+    setItemTypes((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportCategories = (newCats: Omit<ExpenseCategoryMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...expenseCategories.map((c) => c.id)) + 1;
+    const records: ExpenseCategoryMaster[] = newCats.map((c) => ({
+      ...c,
+      id: nextId++,
+    }));
+    setExpenseCategories((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportExpenses = (newExpenses: Omit<ExpenseMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...expenses.map((e) => e.id)) + 1;
+    const records: ExpenseMaster[] = newExpenses.map((e) => ({
+      ...e,
+      id: nextId++,
+    }));
+    setExpenses((prev) => [...prev, ...records]);
+    return records.length;
+  };
+
+  const bulkImportQuotations = (newQuotations: Omit<QuotationMaster, 'id'>[]): number => {
+    let nextId = Math.max(0, ...quotations.map((q) => q.id)) + 1;
+    const records: QuotationMaster[] = newQuotations.map((q) => ({
+      ...q,
+      id: nextId++,
+    }));
+    setQuotations((prev) => [...prev, ...records]);
+    return records.length;
   };
 
   const value = useMemo(
@@ -403,7 +602,11 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeTab,
       setActiveTab,
       currency,
-      setCurrency,
+      themeMode,
+      toggleThemeMode,
+      isAuthenticated,
+      login,
+      logout,
       currentUser,
       setCurrentUser,
       clients,
@@ -416,6 +619,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       roles,
       userRoles,
       expenses,
+      quotations,
       addClient,
       updateClient,
       deleteClient,
@@ -445,6 +649,10 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addExpense,
       updateExpense,
       deleteExpense,
+      addQuotation,
+      updateQuotation,
+      deleteQuotation,
+      getQuotation,
       getClient,
       getProject,
       getItemType,
@@ -457,13 +665,24 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       getProjectExpenses,
       getProjectSpent,
       getVendorSpent,
+      downloadExpensesCSV,
       resetToSampleData,
       exportDatabaseJSON,
       importDatabaseJSON,
+      bulkImportClients,
+      bulkImportProjects,
+      bulkImportVendors,
+      bulkImportItems,
+      bulkImportItemTypes,
+      bulkImportCategories,
+      bulkImportExpenses,
+      bulkImportQuotations,
     }),
     [
       activeTab,
       currency,
+      themeMode,
+      isAuthenticated,
       currentUser,
       clients,
       projects,
@@ -475,6 +694,7 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       roles,
       userRoles,
       expenses,
+      quotations,
     ]
   );
 

@@ -41,6 +41,7 @@ export interface ItemTypeMaster {
 // 4. Item Master
 export interface ItemMaster {
   id: number;                 // Auto-increment primary key in Supabase
+  project_id?: number | null; // Optional project association for project-specific items
   item_name: string;          // Item Name
   item_type_id: number;       // Foreign key to Item Type id
   description: string;        // Description
@@ -125,12 +126,80 @@ export interface ExpenseMaster {
   created_by: number;         // Foreign key to User id
 }
 
+// 11. Quotation Field Visibility Configuration
+export interface QuotationFieldVisibility {
+  showSerialNo: boolean;
+  showItemName: boolean;
+  showReferencePic: boolean;
+  showWorkLocationPic: boolean;
+  showItemSize: boolean;
+  showQuantity: boolean;
+  showUnit: boolean;
+  showRate: boolean;
+  showDiscount: boolean;
+  showGst: boolean;
+  showRemarks: boolean;
+  showLineTotal: boolean;
+}
+
+// 12. Quotation Line Item
+export interface QuotationLineItem {
+  id: number;
+  item_id?: number | null;
+  description: string;
+  reference_picture?: string;
+  work_location_picture?: string;
+  item_size?: string;
+  quantity: number;
+  unit: string;
+  rate: number;
+  discount_percent: number;
+  gst_percent: number;
+  remarks?: string;
+  amount: number;
+}
+
+// 13. Quotation Master
+export interface QuotationMaster {
+  id: number;
+  quotation_number: string;
+  quotation_date: string;
+  valid_until: string;
+  client_id?: number | null;
+  client_name: string;
+  contact_person: string;
+  phone: string;
+  email: string;
+  address: string;
+  gstin?: string;
+  project_id?: number | null;
+  project_name: string;
+  field_visibility: QuotationFieldVisibility;
+  items: QuotationLineItem[];
+  subtotal: number;
+  total_discount: number;
+  total_gst: number;
+  grand_total: number;
+  payment_terms: string;
+  bank_details: string;
+  notes: string;
+  status: 'Draft' | 'Sent' | 'Approved' | 'Rejected';
+  created_by: number;
+  created_at: string;
+}
+
+export type ViewMode = 'grid' | 'list';
+export type ThemeMode = 'dark' | 'light';
+
 export type NavTab = 
   | 'dashboard'
   | 'expenses'
+  | 'quotation'
+  | 'masters'
+  | 'team'
   | 'projects'
   | 'clients'
   | 'vendors'
   | 'items'
-  | 'categories'
-  | 'team';
+  | 'categories';
+

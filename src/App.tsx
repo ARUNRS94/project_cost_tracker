@@ -3,25 +3,45 @@ import { ERPProvider, useERP } from './context/ERPContext';
 import { Header } from './components/layout/Header';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
 import { ExpenseMasterView } from './components/expenses/ExpenseMasterView';
-import { ProjectMasterView } from './components/projects/ProjectMasterView';
-import { ClientMasterView } from './components/clients/ClientMasterView';
-import { VendorMasterView } from './components/vendors/VendorMasterView';
-import { ItemMasterView } from './components/items/ItemMasterView';
-import { ExpenseCategoryMasterView } from './components/categories/ExpenseCategoryMasterView';
+import { QuotationGeneratorView } from './components/quotation/QuotationGeneratorView';
+import { MastersView, MasterSubTab } from './components/masters/MastersView';
 import { TeamMasterView } from './components/access/TeamMasterView';
 import { ExportImportModal } from './components/common/ExportImportModal';
+import { ExpenseModal } from './components/expenses/ExpenseModal';
+import { LoginPage } from './components/auth/LoginPage';
 
 const MainLayout: React.FC = () => {
-  const { activeTab } = useERP();
+  const { activeTab, isAuthenticated } = useERP();
   const [isDataBackupOpen, setIsDataBackupOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'import' | 'export_csv' | 'backup' | 'supabase'>('import');
+  const [modalMaster, setModalMaster] = useState<'clients' | 'projects' | 'vendors' | 'items' | 'categories' | 'expenses'>('clients');
   const [isNewExpenseModalOpen, setIsNewExpenseModalOpen] = useState(false);
 
+  const handleOpenImport = (
+    master: 'clients' | 'projects' | 'vendors' | 'items' | 'categories' | 'expenses' = 'projects'
+  ) => {
+    setModalTab('import');
+    setModalMaster(master);
+    setIsDataBackupOpen(true);
+  };
+
+  const handleOpenDataBackup = () => {
+    setModalTab('backup');
+    setIsDataBackupOpen(true);
+  };
+
+  // If user is logged out, show the Login Page
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
   return (
-    <div className="min-h-screen bg-[#1E1B18] text-[#F0E9DF] flex flex-col font-sans antialiased selection:bg-[#C9A66B]/30 selection:text-[#F0E9DF]">
-      {/* Top Bar Header with Tabs */}
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col font-sans antialiased selection:bg-[var(--accent)]/30 selection:text-[var(--text)] transition-colors">
+      {/* Top Bar Header with Tabs & Controls */}
       <Header
         onOpenNewExpense={() => setIsNewExpenseModalOpen(true)}
-        onOpenDataBackup={() => setIsDataBackupOpen(true)}
+        onOpenDataBackup={handleOpenDataBackup}
+        onOpenImportMasters={() => handleOpenImport('projects')}
       />
 
       {/* Main Viewport matching price-calculator.html layout container */}
@@ -31,38 +51,40 @@ const MainLayout: React.FC = () => {
             onOpenNewExpense={() => setIsNewExpenseModalOpen(true)}
           />
         )}
-        {activeTab === 'expenses' && (
-          <ExpenseMasterView
-            isCreateModalOpen={isNewExpenseModalOpen}
-            onCloseCreateModal={() => setIsNewExpenseModalOpen(false)}
+        {activeTab === 'expenses' && <ExpenseMasterView />}
+        {activeTab === 'quotation' && <QuotationGeneratorView />}
+        {(activeTab === 'masters' ||
+          ['projects', 'clients', 'vendors', 'items', 'categories'].includes(activeTab)) && (
+          <MastersView
+            initialSubTab={
+              ['projects', 'clients', 'vendors', 'items', 'categories'].includes(activeTab)
+                ? (activeTab as MasterSubTab)
+                : 'projects'
+            }
+            onOpenImport={(m) => handleOpenImport(m)}
           />
         )}
-        {activeTab === 'projects' && <ProjectMasterView />}
-        {activeTab === 'clients' && <ClientMasterView />}
-        {activeTab === 'vendors' && <VendorMasterView />}
-        {activeTab === 'items' && <ItemMasterView />}
-        {activeTab === 'categories' && <ExpenseCategoryMasterView />}
         {activeTab === 'team' && <TeamMasterView />}
       </main>
 
       {/* Footer Note */}
-      <footer className="border-t border-[#38322C] py-5 px-6 text-center text-xs text-[#7C7062] font-mono">
-        Project Code Tracker · Auto-increment identity keys for Supabase schema · Offline-first state persistence
+      <footer className="border-t border-[var(--border-soft)] py-5 px-6 text-center text-xs text-[var(--text-faint)] font-mono">
+        Project Code Tracker · Standard Rupee (₹) Operating Ledger · Supabase Identity Schema & RBAC
       </footer>
 
       {/* Global Data Backup & Sync Modal */}
       <ExportImportModal
         isOpen={isDataBackupOpen}
         onClose={() => setIsDataBackupOpen(false)}
+        initialTab={modalTab}
+        initialMaster={modalMaster}
       />
 
-      {/* Quick Record Expense Modal when opened from another tab */}
-      {isNewExpenseModalOpen && activeTab !== 'expenses' && (
-        <ExpenseMasterView
-          isCreateModalOpen={true}
-          onCloseCreateModal={() => setIsNewExpenseModalOpen(false)}
-        />
-      )}
+      {/* Global Record Expense Modal (Opens from Header anywhere in the app) */}
+      <ExpenseModal
+        isOpen={isNewExpenseModalOpen}
+        onClose={() => setIsNewExpenseModalOpen(false)}
+      />
     </div>
   );
 };

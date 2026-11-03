@@ -1,7 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { ExpenseMaster, PaymentMode, PaymentStatus } from '../../types/erp';
+import { ExpenseMaster, PaymentMode, PaymentStatus, ViewMode } from '../../types/erp';
 import { ReceiptModal } from '../common/ReceiptModal';
+import { ViewToggle } from '../common/ViewToggle';
+import { ExpenseModal } from './ExpenseModal';
+import { exportMasterToCSV, downloadFile } from '../../services/api';
 import {
   Search,
   Plus,
@@ -12,7 +15,29 @@ import {
   X,
   Calculator,
   ArrowUpDown,
+  Download,
+  Upload,
+  Calendar,
+  Columns,
+  ChevronDown,
+  Check,
+  RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
+
+export interface ExpenseColumnVisibility {
+  date: boolean;
+  project: boolean;
+  category: boolean;
+  description: boolean;
+  vendor: boolean;
+  qtyRate: boolean;
+  amount: boolean;
+  statusMode: boolean;
+  invoiceRef: boolean;
+  receipt: boolean;
+  actions: boolean;
+}
 
 interface ExpenseMasterViewProps {
   isCreateModalOpen?: boolean;
@@ -41,6 +66,8 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
     getUser,
   } = useERP();
 
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<string>('all');
@@ -48,12 +75,46 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
   const [selectedVendor, setSelectedVendor] = useState<string>('all');
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<string>('all');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('all');
+  
+  // Date-wise filter state
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'last_30_days'>('all');
+  
+  // Amount range filters
+  const [minAmount, setMinAmount] = useState<string>('');
+  const [maxAmount, setMaxAmount] = useState<string>('');
+
   const [sortField, setSortField] = useState<'date' | 'amount'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Column Visibility State
+  const [visibleColumns, setVisibleColumns] = useState<ExpenseColumnVisibility>({
+    date: true,
+    project: true,
+    category: true,
+    description: true,
+    vendor: true,
+    qtyRate: true,
+    amount: true,
+    statusMode: true,
+    invoiceRef: true,
+    receipt: true,
+    actions: true,
+  });
+  const [isColumnDropdownOpen, setIsColumnDropdownOpen] = useState(false);
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(isCreateModalOpen);
   const [editingExpense, setEditingExpense] = useState<ExpenseMaster | null>(null);
+
+  // Sync prop changes
+  useEffect(() => {
+    if (isCreateModalOpen) {
+      setEditingExpense(null);
+      setIsModalOpen(true);
+    }
+  }, [isCreateModalOpen]);
 
   // Receipt Modal state
   const [viewingReceipt, setViewingReceipt] = useState<{
@@ -66,6 +127,63 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
     isOpen: false,
     title: '',
   });
+
+  // Date preset selector helper
+  const applyDatePreset = (preset: 'all' | 'today' | 'this_week' | 'this_month' | 'last_30_days') => {
+    setDatePreset(preset);
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+
+    if (preset === 'all') {
+      setStartDate('');
+      setEndDate('');
+    } else if (preset === 'today') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (preset === 'this_week') {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(now.setDate(diff));
+      setStartDate(monday.toISOString().slice(0, 10));
+      setEndDate(todayStr);
+    } else if (preset === 'this_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      setStartDate(firstDay);
+      setEndDate(todayStr);
+    } else if (preset === 'last_30_days') {
+      const prior30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      setStartDate(prior30);
+      setEndDate(todayStr);
+    }
+  };
+
+  // Reset all filters helper
+  const handleResetAllFilters = () => {
+    setSearchTerm('');
+    setSelectedProject('all');
+    setSelectedCategory('all');
+    setSelectedVendor('all');
+    setSelectedPaymentStatus('all');
+    setSelectedPaymentMode('all');
+    setStartDate('');
+    setEndDate('');
+    setDatePreset('all');
+    setMinAmount('');
+    setMaxAmount('');
+  };
+
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+    selectedProject !== 'all' ||
+    selectedCategory !== 'all' ||
+    selectedVendor !== 'all' ||
+    selectedPaymentStatus !== 'all' ||
+    selectedPaymentMode !== 'all' ||
+    startDate ||
+    endDate ||
+    minAmount ||
+    maxAmount
+  );
 
   // Form states for Add/Edit (NO Expense ID field!)
   const initialFormState: Omit<ExpenseMaster, 'id'> = {
@@ -109,7 +227,30 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
           selectedPaymentStatus === 'all' || exp.payment_status === selectedPaymentStatus;
         const matchesMode = selectedPaymentMode === 'all' || exp.payment_mode === selectedPaymentMode;
 
-        return matchesSearch && matchesProject && matchesCat && matchesVendor && matchesStatus && matchesMode;
+        // Date range matching
+        const matchesDate = (() => {
+          if (startDate && exp.expense_date < startDate) return false;
+          if (endDate && exp.expense_date > endDate) return false;
+          return true;
+        })();
+
+        // Amount matching
+        const minAmtNum = minAmount ? parseFloat(minAmount) : null;
+        const maxAmtNum = maxAmount ? parseFloat(maxAmount) : null;
+        const matchesMin = minAmtNum === null || isNaN(minAmtNum) || exp.amount >= minAmtNum;
+        const matchesMax = maxAmtNum === null || isNaN(maxAmtNum) || exp.amount <= maxAmtNum;
+
+        return (
+          matchesSearch &&
+          matchesProject &&
+          matchesCat &&
+          matchesVendor &&
+          matchesStatus &&
+          matchesMode &&
+          matchesDate &&
+          matchesMin &&
+          matchesMax
+        );
       })
       .sort((a, b) => {
         if (sortField === 'amount') {
@@ -127,11 +268,47 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
     selectedVendor,
     selectedPaymentStatus,
     selectedPaymentMode,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
     sortField,
     sortOrder,
     getProject,
     getVendor,
   ]);
+
+  // Download ONLY filtered items as CSV
+  const handleDownloadFilteredCSV = () => {
+    const csv = exportMasterToCSV(
+      `Expenses_Filtered_${new Date().toISOString().slice(0, 10)}`,
+      filteredExpenses.map((exp) => {
+        const proj = getProject(exp.project_id);
+        const item = getItem(exp.project_item_id || undefined);
+        const cat = getExpenseCategory(exp.expense_category_id);
+        const vendor = getVendor(exp.vendor_id);
+        const creator = getUser(exp.created_by);
+        return {
+          Expense_Date: exp.expense_date,
+          Project_Name: proj ? proj.project_name : `Project #${exp.project_id}`,
+          Project_Item: item ? item.item_name : '',
+          Category: cat ? cat.category_name : `Category #${exp.expense_category_id}`,
+          Vendor: vendor ? vendor.vendor_name : `Vendor #${exp.vendor_id}`,
+          Description: exp.description,
+          Quantity: exp.quantity ?? '',
+          Unit: exp.unit ?? '',
+          Rate_INR: exp.rate ?? '',
+          Amount_INR: exp.amount,
+          Payment_Status: exp.payment_status,
+          Payment_Mode: exp.payment_mode,
+          Reference_Invoice_Number: exp.reference_number || '',
+          Remarks: exp.remarks || '',
+          Created_By: creator ? creator.full_name : 'Staff',
+        };
+      })
+    );
+    downloadFile(csv, `Expenses_Filtered_${new Date().toISOString().slice(0, 10)}.csv`);
+  };
 
   // Aggregate sums
   const totalFilteredAmount = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
@@ -140,282 +317,425 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const pendingFilteredAmount = totalFilteredAmount - paidFilteredAmount;
 
-  // Open modal for Create (NO ID input field needed)
+  // Open modal for Create
   const handleOpenCreate = () => {
     setEditingExpense(null);
-    setFormData({
-      ...initialFormState,
-      project_id: projects[0]?.id || 1,
-      expense_category_id: expenseCategories[0]?.id || 1,
-      vendor_id: vendors[0]?.id || 1,
-      created_by: currentUser.id,
-    });
     setIsModalOpen(true);
   };
 
   // Open modal for Edit
   const handleOpenEdit = (exp: ExpenseMaster) => {
     setEditingExpense(exp);
-    setFormData({ ...exp });
     setIsModalOpen(true);
-  };
-
-  // Handle auto-calc on Qty or Rate change
-  const handleQtyRateChange = (field: 'quantity' | 'rate', value: number) => {
-    const updated = { ...formData, [field]: value };
-    const qty = Number(field === 'quantity' ? value : updated.quantity) || 0;
-    const rate = Number(field === 'rate' ? value : updated.rate) || 0;
-    if (qty > 0 && rate > 0) {
-      updated.amount = Math.round(qty * rate);
-    }
-    setFormData(updated);
-  };
-
-  const handleSaveExpense = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.project_id || !formData.amount) {
-      alert('Please fill in required fields: Project and Amount.');
-      return;
-    }
-
-    if (editingExpense) {
-      updateExpense({
-        ...editingExpense,
-        ...formData,
-      } as ExpenseMaster);
-    } else {
-      addExpense({
-        project_id: Number(formData.project_id),
-        project_item_id: formData.project_item_id ? Number(formData.project_item_id) : null,
-        expense_date: formData.expense_date,
-        expense_category_id: Number(formData.expense_category_id),
-        description: formData.description || 'General expense entry',
-        vendor_id: Number(formData.vendor_id),
-        quantity: formData.quantity ? Number(formData.quantity) : null,
-        unit: formData.unit || null,
-        rate: formData.rate ? Number(formData.rate) : null,
-        amount: Number(formData.amount) || 0,
-        payment_status: formData.payment_status,
-        payment_mode: formData.payment_mode,
-        attachment: formData.attachment || '',
-        reference_number: formData.reference_number || 'N/A',
-        remarks: formData.remarks || '',
-        created_by: formData.created_by || currentUser.id,
-      });
-    }
-
-    setIsModalOpen(false);
-    if (onCloseCreateModal) onCloseCreateModal();
   };
 
   return (
     <div className="space-y-5">
       {/* View Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#38322C]">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[var(--border-soft)]">
         <div>
-          <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062]">EXPENDITURE LEDGER</p>
-          <h1 className="font-display font-normal text-2xl text-[#F0E9DF]">
+          <p className="text-[10.5px] uppercase tracking-wider text-[var(--text-faint)] font-mono">EXPENDITURE LEDGER</p>
+          <h1 className="font-display font-medium text-2xl md:text-3xl text-[var(--text)]">
             Expense Master
           </h1>
-          <p className="text-xs text-[#B4A697] mt-0.5">
+          <p className="text-xs text-[var(--text-dim)] mt-0.5">
             Log site expenditures, vendor vouchers, material orders, and payment statuses.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all whitespace-nowrap shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Record New Expense</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+
+          {/* Download Filtered CSV */}
+          <button
+            onClick={handleDownloadFilteredCSV}
+            title={`Download ${filteredExpenses.length} filtered expenses as CSV`}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-[var(--accent)]" />
+            <span className="hidden sm:inline">Download CSV ({filteredExpenses.length})</span>
+          </button>
+
+          {/* Select Columns to View Toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setIsColumnDropdownOpen(!isColumnDropdownOpen)}
+              title="Select columns to view in the table"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded border transition-colors cursor-pointer ${
+                isColumnDropdownOpen
+                  ? 'bg-[var(--surface-2)] text-[var(--accent)] border-[var(--accent)]'
+                  : 'bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)]'
+              }`}
+            >
+              <Columns className="w-3.5 h-3.5 text-[var(--accent)]" />
+              <span className="hidden sm:inline">Columns</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${isColumnDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isColumnDropdownOpen && (
+              <div className="absolute right-0 mt-1.5 w-60 p-3 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-xl z-50 text-xs">
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border-soft)]">
+                  <span className="font-semibold text-[var(--text)] font-mono text-[11px] uppercase tracking-wider">
+                    Select Columns
+                  </span>
+                  <button
+                    onClick={() =>
+                      setVisibleColumns({
+                        date: true,
+                        project: true,
+                        category: true,
+                        description: true,
+                        vendor: true,
+                        qtyRate: true,
+                        amount: true,
+                        statusMode: true,
+                        invoiceRef: true,
+                        receipt: true,
+                        actions: true,
+                      })
+                    }
+                    className="text-[10px] text-[var(--accent)] hover:underline cursor-pointer"
+                  >
+                    Reset All
+                  </button>
+                </div>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                  {[
+                    { key: 'date', label: 'Expense Date' },
+                    { key: 'project', label: 'Project & Item' },
+                    { key: 'category', label: 'Expense Category' },
+                    { key: 'description', label: 'Description' },
+                    { key: 'vendor', label: 'Vendor' },
+                    { key: 'qtyRate', label: 'Quantity & Rate' },
+                    { key: 'amount', label: 'Total Amount' },
+                    { key: 'statusMode', label: 'Status & Mode' },
+                    { key: 'invoiceRef', label: 'Invoice Reference' },
+                    { key: 'receipt', label: 'Bill / Receipt' },
+                    { key: 'actions', label: 'Actions' },
+                  ].map((col) => (
+                    <label
+                      key={col.key}
+                      className="flex items-center gap-2 p-1 rounded hover:bg-[var(--surface-2)] cursor-pointer text-[var(--text)]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns[col.key as keyof ExpenseColumnVisibility]}
+                        onChange={(e) =>
+                          setVisibleColumns((prev) => ({
+                            ...prev,
+                            [col.key]: e.target.checked,
+                          }))
+                        }
+                        className="rounded border-[var(--border)] accent-[var(--accent)]"
+                      />
+                      <span>{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <ViewToggle mode={viewMode} onChange={setViewMode} />
+
+          <button
+            onClick={handleOpenCreate}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18] transition-all whitespace-nowrap shadow-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Record New Expense</span>
+          </button>
+        </div>
       </div>
 
       {/* Aggregate Metric Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-[#26221E] rounded-md border border-[#38322C]">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-[var(--surface)] rounded-md border border-[var(--border)]">
         <div className="px-2">
-          <p className="text-[10.5px] text-[#7C7062] uppercase tracking-wider">
+          <p className="text-[10.5px] text-[var(--text-faint)] uppercase tracking-wider font-mono">
             Total Incurred ({filteredExpenses.length} Records)
           </p>
-          <p className="text-xl font-mono text-[#C9A66B] font-medium tabular-nums mt-0.5">
+          <p className="text-xl font-mono text-[var(--accent)] font-medium tabular-nums mt-0.5">
             {currency} {totalFilteredAmount.toLocaleString('en-IN')}
           </p>
         </div>
-        <div className="px-2 border-t sm:border-t-0 sm:border-l border-[#38322C]">
-          <p className="text-[10.5px] text-[#7C7062] uppercase tracking-wider">
+        <div className="px-2 border-t sm:border-t-0 sm:border-l border-[var(--border-soft)]">
+          <p className="text-[10.5px] text-[var(--text-faint)] uppercase tracking-wider font-mono">
             Paid & Settled
           </p>
-          <p className="text-xl font-mono text-[#7C9885] font-medium tabular-nums mt-0.5">
+          <p className="text-xl font-mono text-emerald-600 dark:text-[#7C9885] font-medium tabular-nums mt-0.5">
             {currency} {paidFilteredAmount.toLocaleString('en-IN')}
           </p>
         </div>
-        <div className="px-2 border-t sm:border-t-0 sm:border-l border-[#38322C]">
-          <p className="text-[10.5px] text-[#7C7062] uppercase tracking-wider">
+        <div className="px-2 border-t sm:border-t-0 sm:border-l border-[var(--border-soft)]">
+          <p className="text-[10.5px] text-[var(--text-faint)] uppercase tracking-wider font-mono">
             Unpaid / Outstanding
           </p>
-          <p className="text-xl font-mono text-[#F0E9DF] font-medium tabular-nums mt-0.5">
+          <p className="text-xl font-mono text-[var(--text)] font-medium tabular-nums mt-0.5">
             {currency} {pendingFilteredAmount.toLocaleString('en-IN')}
           </p>
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="p-3 bg-[#26221E] rounded-md border border-[#38322C] space-y-3">
+      {/* Filter Toolbar (Search + Date-wise Presets + Min/Max Amount + Dropdowns) */}
+      <div className="p-3 bg-[var(--surface)] rounded-md border border-[var(--border)] space-y-3">
+        {/* Row 1: Search box & Active Filters status */}
         <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-          {/* Search box */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-[#7C7062] absolute left-3 top-2.5" />
+            <Search className="w-4 h-4 text-[var(--text-faint)] absolute left-3 top-2.5" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search expenses by description, vendor, invoice ref..."
-              className="w-full text-xs pl-9 pr-8 py-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] placeholder-[#7C7062] focus:border-[#8A7145] outline-none"
+              className="w-full text-xs pl-9 pr-8 py-2 rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] placeholder-[var(--text-faint)] focus:border-[var(--accent)] outline-none"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-2.5 text-[#7C7062] hover:text-[#F0E9DF]"
+                className="absolute right-2.5 top-2.5 text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Quick Dropdown Filters */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Project Filter */}
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              className="text-xs bg-[#1E1B18] border border-[#4A4038] rounded px-2.5 py-1.5 text-[#F0E9DF] outline-none cursor-pointer"
-            >
-              <option value="all">All Projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.project_name.slice(0, 24)}...
-                </option>
-              ))}
-            </select>
-
-            {/* Category Filter */}
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="text-xs bg-[#1E1B18] border border-[#4A4038] rounded px-2.5 py-1.5 text-[#F0E9DF] outline-none cursor-pointer"
-            >
-              <option value="all">All Categories</option>
-              {expenseCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.category_name}
-                </option>
-              ))}
-            </select>
-
-            {/* Payment Status Filter */}
-            <select
-              value={selectedPaymentStatus}
-              onChange={(e) => setSelectedPaymentStatus(e.target.value)}
-              className="text-xs bg-[#1E1B18] border border-[#4A4038] rounded px-2.5 py-1.5 text-[#F0E9DF] outline-none cursor-pointer"
-            >
-              <option value="all">All Statuses</option>
-              <option value="Paid">Paid</option>
-              <option value="Unpaid">Unpaid</option>
-              <option value="Partial">Partial</option>
-            </select>
-
-            {/* Payment Mode Filter */}
-            <select
-              value={selectedPaymentMode}
-              onChange={(e) => setSelectedPaymentMode(e.target.value)}
-              className="text-xs bg-[#1E1B18] border border-[#4A4038] rounded px-2.5 py-1.5 text-[#F0E9DF] outline-none cursor-pointer"
-            >
-              <option value="all">All Modes</option>
-              <option value="Bank">Bank</option>
-              <option value="UPI">UPI</option>
-              <option value="Cash">Cash</option>
-            </select>
-
-            {/* Clear button */}
-            {(selectedProject !== 'all' ||
-              selectedCategory !== 'all' ||
-              selectedPaymentStatus !== 'all' ||
-              selectedPaymentMode !== 'all' ||
-              searchTerm) && (
+          {/* Quick Date Presets */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
+            <span className="text-[11px] text-[var(--text-faint)] mr-1">Period:</span>
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: 'today', label: 'Today' },
+              { id: 'this_week', label: 'This Week' },
+              { id: 'this_month', label: 'This Month' },
+              { id: 'last_30_days', label: 'Last 30 Days' },
+            ].map((preset) => (
               <button
-                onClick={() => {
-                  setSelectedProject('all');
-                  setSelectedCategory('all');
-                  setSelectedVendor('all');
-                  setSelectedPaymentStatus('all');
-                  setSelectedPaymentMode('all');
-                  setSearchTerm('');
-                }}
-                className="text-xs text-[#B5766A] hover:underline px-2"
+                key={preset.id}
+                onClick={() => applyDatePreset(preset.id as any)}
+                className={`px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                  datePreset === preset.id && !startDate && preset.id === 'all'
+                    ? 'bg-[var(--accent)] text-[#1E1B18] font-semibold'
+                    : datePreset === preset.id
+                    ? 'bg-[var(--accent)] text-[#1E1B18] font-semibold'
+                    : 'bg-[var(--bg)] text-[var(--text-dim)] border border-[var(--border)] hover:border-[var(--accent)]'
+                }`}
               >
-                Clear
+                {preset.label}
               </button>
-            )}
+            ))}
           </div>
+        </div>
+
+        {/* Row 2: Date From/To Range, Min/Max Amount, and Master Selectors */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border-soft)]">
+          {/* Custom Date Range */}
+          <div className="flex items-center gap-1.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1">
+            <Calendar className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+            <span className="text-[var(--text-faint)] font-mono text-[11px]">From:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setDatePreset('custom' as any);
+              }}
+              className="bg-transparent text-[var(--text)] text-xs font-mono outline-none cursor-pointer"
+            />
+            <span className="text-[var(--text-faint)] font-mono text-[11px] ml-1">To:</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setDatePreset('custom' as any);
+              }}
+              className="bg-transparent text-[var(--text)] text-xs font-mono outline-none cursor-pointer"
+            />
+          </div>
+
+          {/* Amount range filters */}
+          <div className="flex items-center gap-1.5 text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1">
+            <span className="text-[var(--text-faint)] font-mono text-[11px]">₹ Min:</span>
+            <input
+              type="number"
+              placeholder="0"
+              value={minAmount}
+              onChange={(e) => setMinAmount(e.target.value)}
+              className="w-16 bg-transparent text-[var(--text)] text-xs font-mono outline-none"
+            />
+            <span className="text-[var(--text-faint)] font-mono text-[11px]">Max:</span>
+            <input
+              type="number"
+              placeholder="Any"
+              value={maxAmount}
+              onChange={(e) => setMaxAmount(e.target.value)}
+              className="w-16 bg-transparent text-[var(--text)] text-xs font-mono outline-none"
+            />
+          </div>
+
+          {/* Project Filter */}
+          <select
+            value={selectedProject}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
+          >
+            <option value="all">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.project_name.slice(0, 24)}...
+              </option>
+            ))}
+          </select>
+
+          {/* Category Filter */}
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
+          >
+            <option value="all">All Categories</option>
+            {expenseCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.category_name}
+              </option>
+            ))}
+          </select>
+
+          {/* Vendor Filter */}
+          <select
+            value={selectedVendor}
+            onChange={(e) => setSelectedVendor(e.target.value)}
+            className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
+          >
+            <option value="all">All Vendors</option>
+            {vendors.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.vendor_name.slice(0, 20)}...
+              </option>
+            ))}
+          </select>
+
+          {/* Payment Status Filter */}
+          <select
+            value={selectedPaymentStatus}
+            onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+            className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
+          >
+            <option value="all">All Statuses</option>
+            <option value="Paid">Paid</option>
+            <option value="Unpaid">Unpaid</option>
+            <option value="Partial">Partial</option>
+          </select>
+
+          {/* Payment Mode Filter */}
+          <select
+            value={selectedPaymentMode}
+            onChange={(e) => setSelectedPaymentMode(e.target.value)}
+            className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
+          >
+            <option value="all">All Modes</option>
+            <option value="Bank">Bank</option>
+            <option value="UPI">UPI</option>
+            <option value="Cash">Cash</option>
+          </select>
+
+          {/* Reset All Filters button */}
+          {hasActiveFilters && (
+            <button
+              onClick={handleResetAllFilters}
+              className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-400 px-2 py-1 bg-red-500/10 rounded cursor-pointer transition-colors"
+              title="Reset all active filters"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Filters</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Expense Table (NO ID column!) */}
-      <div className="bg-[#26221E] rounded-md border border-[#38322C] overflow-hidden">
+      {viewMode === 'list' && (
+      <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-[#1E1B18] text-[#7C7062] border-b border-[#38322C]">
+            <thead className="bg-[var(--surface-2)] text-[var(--text-faint)] border-b border-[var(--border)]">
               <tr>
-                <th
-                  onClick={() => {
-                    if (sortField === 'date') {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('date');
-                      setSortOrder('desc');
-                    }
-                  }}
-                  className="py-3 px-3.5 font-normal text-[10.5px] uppercase cursor-pointer hover:text-[#F0E9DF]"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Date</span>
-                    <ArrowUpDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase">Project & Item</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase">Category</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase">Description</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase">Vendor</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase text-right">Qty & Rate</th>
-                <th
-                  onClick={() => {
-                    if (sortField === 'amount') {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-                    } else {
-                      setSortField('amount');
-                      setSortOrder('desc');
-                    }
-                  }}
-                  className="py-3 px-3.5 font-normal text-[10.5px] uppercase text-right cursor-pointer hover:text-[#F0E9DF]"
-                >
-                  <div className="flex items-center justify-end gap-1">
-                    <span>Amount</span>
-                    <ArrowUpDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase">Status / Mode</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase">Invoice Ref</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase text-center">Receipt</th>
-                <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase text-right">Actions</th>
+                {visibleColumns.date && (
+                  <th
+                    onClick={() => {
+                      if (sortField === 'date') {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortField('date');
+                        setSortOrder('desc');
+                      }
+                    }}
+                    className="py-3 px-3.5 font-normal text-[10.5px] uppercase cursor-pointer hover:text-[var(--text)] font-mono"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Date</span>
+                      <ArrowUpDown className="w-3 h-3" />
+                    </div>
+                  </th>
+                )}
+                {visibleColumns.project && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono">Project & Item</th>
+                )}
+                {visibleColumns.category && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono">Category</th>
+                )}
+                {visibleColumns.description && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono">Description</th>
+                )}
+                {visibleColumns.vendor && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono">Vendor</th>
+                )}
+                {visibleColumns.qtyRate && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono text-right">Qty & Rate</th>
+                )}
+                {visibleColumns.amount && (
+                  <th
+                    onClick={() => {
+                      if (sortField === 'amount') {
+                        setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      } else {
+                        setSortField('amount');
+                        setSortOrder('desc');
+                      }
+                    }}
+                    className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono text-right cursor-pointer hover:text-[var(--text)]"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <span>Amount</span>
+                      <ArrowUpDown className="w-3 h-3" />
+                    </div>
+                  </th>
+                )}
+                {visibleColumns.statusMode && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono">Status / Mode</th>
+                )}
+                {visibleColumns.invoiceRef && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono">Invoice Ref</th>
+                )}
+                {visibleColumns.receipt && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono text-center">Receipt</th>
+                )}
+                {visibleColumns.actions && (
+                  <th className="py-3 px-3.5 font-normal text-[10.5px] uppercase font-mono text-right">Actions</th>
+                )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#38322C]/70 text-[#B4A697]">
+            <tbody className="divide-y divide-[var(--border-soft)] text-[var(--text-dim)]">
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-[#7C7062]">
-                    <Receipt className="w-8 h-8 mx-auto mb-2 opacity-40 text-[#C9A66B]" />
-                    <p className="text-xs font-medium text-[#F0E9DF]">No expense records found</p>
-                    <p className="text-[11px] text-[#7C7062] mt-1">
-                      Click "+ Record New Expense" above to add an entry.
+                  <td
+                    colSpan={Object.values(visibleColumns).filter(Boolean).length || 1}
+                    className="py-12 text-center text-[var(--text-faint)]"
+                  >
+                    <Receipt className="w-8 h-8 mx-auto mb-2 opacity-40 text-[var(--accent)]" />
+                    <p className="text-xs font-medium text-[var(--text)]">No expense records found</p>
+                    <p className="text-[11px] text-[var(--text-faint)] mt-1">
+                      {hasActiveFilters
+                        ? 'Try clearing or widening your active filters above.'
+                        : 'Click "+ Record New Expense" above to add an entry.'}
                     </p>
                   </td>
                 </tr>
@@ -429,132 +749,152 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
                   return (
                     <tr
                       key={exp.id}
-                      className="hover:bg-[#302A25]/50 transition-colors"
+                      className="hover:bg-[var(--surface-2)]/50 transition-colors"
                     >
                       {/* Date */}
-                      <td className="py-3 px-3.5 font-mono text-[11px] text-[#7C7062]">
-                        {exp.expense_date}
-                      </td>
+                      {visibleColumns.date && (
+                        <td className="py-3 px-3.5 font-mono text-[11px] text-[var(--text-faint)]">
+                          {exp.expense_date}
+                        </td>
+                      )}
 
                       {/* Project & Item Name (NO IDs!) */}
-                      <td className="py-3 px-3.5">
-                        <div className="font-medium text-[#F0E9DF]">
-                          {proj ? proj.project_name : 'Direct Project'}
-                        </div>
-                        {item && (
-                          <div className="text-[11px] text-[#7C7062]">
-                            ↳ {item.item_name}
+                      {visibleColumns.project && (
+                        <td className="py-3 px-3.5">
+                          <div className="font-medium text-[var(--text)]">
+                            {proj ? proj.project_name : 'Direct Project'}
                           </div>
-                        )}
-                      </td>
+                          {item && (
+                            <div className="text-[11px] text-[var(--text-faint)]">
+                              ↳ {item.item_name}
+                            </div>
+                          )}
+                        </td>
+                      )}
 
                       {/* Category */}
-                      <td className="py-3 px-3.5 text-[#B4A697]">
-                        {cat?.category_name || 'General'}
-                      </td>
+                      {visibleColumns.category && (
+                        <td className="py-3 px-3.5 text-[var(--text-dim)]">
+                          {cat?.category_name || 'General'}
+                        </td>
+                      )}
 
                       {/* Description */}
-                      <td
-                        className="py-3 px-3.5 text-[#F0E9DF] max-w-[220px] truncate"
-                        title={exp.description}
-                      >
-                        {exp.description}
-                      </td>
+                      {visibleColumns.description && (
+                        <td
+                          className="py-3 px-3.5 text-[var(--text)] max-w-[220px] truncate"
+                          title={exp.description}
+                        >
+                          {exp.description}
+                        </td>
+                      )}
 
                       {/* Vendor */}
-                      <td className="py-3 px-3.5 text-[#B4A697]">
-                        {vendor ? vendor.vendor_name : 'Direct'}
-                      </td>
+                      {visibleColumns.vendor && (
+                        <td className="py-3 px-3.5 text-[var(--text-dim)]">
+                          {vendor ? vendor.vendor_name : 'Direct'}
+                        </td>
+                      )}
 
                       {/* Qty & Rate */}
-                      <td className="py-3 px-3.5 font-mono text-right tabular-nums text-[#7C7062]">
-                        {exp.quantity && exp.rate ? (
-                          <>
-                            <span>{exp.quantity} {exp.unit || ''}</span>
-                            <span className="text-[10px] block text-[#7C7062]">
-                              @ {currency} {exp.rate.toLocaleString('en-IN')}
-                            </span>
-                          </>
-                        ) : (
-                          <span>—</span>
-                        )}
-                      </td>
+                      {visibleColumns.qtyRate && (
+                        <td className="py-3 px-3.5 font-mono text-right tabular-nums text-[var(--text-faint)]">
+                          {exp.quantity && exp.rate ? (
+                            <>
+                              <span>{exp.quantity} {exp.unit || ''}</span>
+                              <span className="text-[10px] block text-[var(--text-faint)]">
+                                @ {currency} {exp.rate.toLocaleString('en-IN')}
+                              </span>
+                            </>
+                          ) : (
+                            <span>—</span>
+                          )}
+                        </td>
+                      )}
 
                       {/* Amount */}
-                      <td className="py-3 px-3.5 font-mono font-medium text-[#C9A66B] text-right tabular-nums text-sm">
-                        {currency} {(Number(exp.amount) || 0).toLocaleString('en-IN')}
-                      </td>
+                      {visibleColumns.amount && (
+                        <td className="py-3 px-3.5 font-mono font-medium text-[var(--accent)] text-right tabular-nums text-sm">
+                          {currency} {(Number(exp.amount) || 0).toLocaleString('en-IN')}
+                        </td>
+                      )}
 
                       {/* Status / Mode */}
-                      <td className="py-3 px-3.5">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`font-semibold text-[11px] ${
-                              exp.payment_status === 'Paid'
-                                ? 'text-[#7C9885]'
-                                : exp.payment_status === 'Partial'
-                                ? 'text-[#C9A66B]'
-                                : 'text-[#B5766A]'
-                            }`}
-                          >
-                            {exp.payment_status}
-                          </span>
-                          <span className="text-[#4A4038]">·</span>
-                          <span className="font-mono text-[11px] text-[#7C7062]">
-                            {exp.payment_mode}
-                          </span>
-                        </div>
-                      </td>
+                      {visibleColumns.statusMode && (
+                        <td className="py-3 px-3.5">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`font-semibold text-[11px] ${
+                                exp.payment_status === 'Paid'
+                                  ? 'text-emerald-600 dark:text-[var(--green)]'
+                                  : exp.payment_status === 'Partial'
+                                  ? 'text-[var(--accent)]'
+                                  : 'text-red-500 dark:text-[#B5766A]'
+                              }`}
+                            >
+                              {exp.payment_status}
+                            </span>
+                            <span className="text-[var(--text-faint)]">·</span>
+                            <span className="font-mono text-[11px] text-[var(--text-faint)]">
+                              {exp.payment_mode}
+                            </span>
+                          </div>
+                        </td>
+                      )}
 
                       {/* Invoice Ref */}
-                      <td className="py-3 px-3.5 font-mono text-xs text-[#7C7062]">
-                        {exp.reference_number || '—'}
-                      </td>
+                      {visibleColumns.invoiceRef && (
+                        <td className="py-3 px-3.5 font-mono text-xs text-[var(--text-faint)]">
+                          {exp.reference_number || '—'}
+                        </td>
+                      )}
 
                       {/* Attachment preview */}
-                      <td className="py-3 px-3.5 text-center">
-                        {exp.attachment ? (
-                          <button
-                            onClick={() =>
-                              setViewingReceipt({
-                                isOpen: true,
-                                title: `Receipt: ${exp.description}`,
-                                subtitle: `${proj?.project_name || ''} · ${exp.reference_number}`,
-                                imageUrl: exp.attachment,
-                                referenceNumber: exp.reference_number,
-                              })
-                            }
-                            className="inline-flex items-center justify-center p-1.5 text-[#C9A66B] hover:text-[#D9B87C] rounded transition-colors"
-                            title="Inspect Bill / Scan"
-                          >
-                            <FileImage className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <span className="text-[#4A4038] text-xs">—</span>
-                        )}
-                      </td>
+                      {visibleColumns.receipt && (
+                        <td className="py-3 px-3.5 text-center">
+                          {exp.attachment ? (
+                            <button
+                              onClick={() =>
+                                setViewingReceipt({
+                                  isOpen: true,
+                                  title: `Receipt: ${exp.description}`,
+                                  subtitle: `${proj?.project_name || ''} · ${exp.reference_number}`,
+                                  imageUrl: exp.attachment,
+                                  referenceNumber: exp.reference_number,
+                                })
+                              }
+                              className="inline-flex items-center justify-center p-1.5 text-[var(--accent)] hover:opacity-80 rounded transition-colors cursor-pointer"
+                              title="Inspect Bill / Scan"
+                            >
+                              <FileImage className="w-4 h-4" />
+                            </button>
+                          ) : (
+                            <span className="text-[var(--text-faint)] text-xs">—</span>
+                          )}
+                        </td>
+                      )}
 
                       {/* Actions */}
-                      <td className="py-3 px-3.5 text-right space-x-1">
-                        <button
-                          onClick={() => handleOpenEdit(exp)}
-                          className="p-1 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Delete this expense entry?')) {
+                      {visibleColumns.actions && (
+                        <td className="py-3 px-3.5 text-right space-x-1">
+                          <button
+                            onClick={() => handleOpenEdit(exp)}
+                            className="p-1 text-[var(--text-faint)] hover:text-[var(--text)] rounded transition-colors cursor-pointer"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
                               deleteExpense(exp.id);
-                            }
-                          }}
-                          className="p-1 text-[#7C7062] hover:text-[#B5766A] rounded transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
+                            }}
+                            className="p-1 text-[var(--text-faint)] hover:text-red-500 rounded transition-colors cursor-pointer"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -563,322 +903,128 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
           </table>
         </div>
       </div>
+      )}
 
-      {/* Add / Edit Expense Modal (NO ID INPUT FIELDS!) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-2xl bg-[#26221E] rounded-md shadow-2xl border border-[#4A4038] overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#38322C]">
-              <div>
-                <h3 className="font-display text-base font-semibold text-[#F0E9DF]">
-                  {editingExpense ? 'Edit Expense Record' : 'Record New Expense'}
-                </h3>
-                <p className="text-xs text-[#B4A697] mt-0.5">
-                  Allocate project cost, vendor bill details, and payment settlement
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  if (onCloseCreateModal) onCloseCreateModal();
-                }}
-                className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {/* Grid View for Expenses */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredExpenses.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-xs text-[var(--text-faint)] border border-dashed border-[var(--border)] rounded">
+              No expense records found.
             </div>
+          ) : (
+            filteredExpenses.map((exp) => {
+              const proj = getProject(exp.project_id);
+              const cat = getExpenseCategory(exp.expense_category_id);
+              const vendor = getVendor(exp.vendor_id);
 
-            <form onSubmit={handleSaveExpense} className="p-6 space-y-4 overflow-y-auto flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Project Selection (NO ID!) */}
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Project *
-                  </label>
-                  <select
-                    required
-                    value={formData.project_id}
-                    onChange={(e) => setFormData({ ...formData, project_id: parseInt(e.target.value, 10) })}
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.project_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Expense Date */}
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Expense Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.expense_date}
-                    onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-                    className="w-full text-xs font-mono p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                </div>
-
-                {/* Expense Category (NO ID!) */}
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Expense Category *
-                  </label>
-                  <select
-                    required
-                    value={formData.expense_category_id}
-                    onChange={(e) => setFormData({ ...formData, expense_category_id: parseInt(e.target.value, 10) })}
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    {expenseCategories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.category_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Vendor / Supplier (NO ID!) */}
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Vendor / Supplier *
-                  </label>
-                  <select
-                    required
-                    value={formData.vendor_id}
-                    onChange={(e) => setFormData({ ...formData, vendor_id: parseInt(e.target.value, 10) })}
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    {vendors.map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.vendor_name} ({v.vendor_type})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Catalog Item (Optional, NO ID!) */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Catalog Item Reference (Optional)
-                  </label>
-                  <select
-                    value={formData.project_item_id || ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        project_item_id: e.target.value ? parseInt(e.target.value, 10) : null,
-                      })
-                    }
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    <option value="">None / General Site Expense</option>
-                    {items.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.item_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Expense Description *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="e.g. 4mm cast acrylic sheet cutting & transportation"
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              {/* Quantity, Rate, Amount (Live Calc) */}
-              <div className="p-3 bg-[#1E1B18] rounded border border-[#38322C] space-y-2">
-                <div className="flex items-center gap-1.5 text-xs text-[#C9A66B] font-medium">
-                  <Calculator className="w-3.5 h-3.5" />
-                  <span>Cost Computation (Quantity × Rate)</span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              return (
+                <div
+                  key={exp.id}
+                  className="p-4 bg-[var(--surface)] border border-[var(--border-soft)] rounded-md flex flex-col justify-between hover:border-[var(--border)] transition-all"
+                >
                   <div>
-                    <label className="block text-[11px] text-[#7C7062] mb-1">Quantity</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.quantity || ''}
-                      onChange={(e) => handleQtyRateChange('quantity', parseFloat(e.target.value) || 0)}
-                      placeholder="1"
-                      className="w-full text-xs font-mono p-1.5 rounded border border-[#4A4038] bg-[#26221E] text-[#F0E9DF] outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#7C7062] mb-1">Unit</label>
-                    <input
-                      type="text"
-                      value={formData.unit || ''}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      placeholder="Sheets, Nos, Hrs"
-                      className="w-full text-xs p-1.5 rounded border border-[#4A4038] bg-[#26221E] text-[#F0E9DF] outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-[#7C7062] mb-1">Rate ({currency})</label>
-                    <input
-                      type="number"
-                      step="any"
-                      value={formData.rate || ''}
-                      onChange={(e) => handleQtyRateChange('rate', parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                      className="w-full text-xs font-mono p-1.5 rounded border border-[#4A4038] bg-[#26221E] text-[#F0E9DF] outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#C9A66B] mb-1">
-                      Final Amount * ({currency})
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      step="any"
-                      value={formData.amount}
-                      onChange={(e) =>
-                        setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })
-                      }
-                      className="w-full text-xs font-mono font-bold p-1.5 rounded border border-[#C9A66B] bg-[#26221E] text-[#C9A66B] outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                          {cat?.category_name || 'General'}
+                        </span>
+                        <span className="text-[11px] font-mono text-[var(--text-faint)]">
+                          {exp.expense_date}
+                        </span>
+                      </div>
 
-              {/* Payment Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Payment Status *
-                  </label>
-                  <select
-                    value={formData.payment_status}
-                    onChange={(e) =>
-                      setFormData({ ...formData, payment_status: e.target.value as PaymentStatus })
-                    }
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    <option value="Paid">Paid</option>
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Partial">Partial</option>
-                  </select>
-                </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEdit(exp)}
+                          className="p-1 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Delete this expense?')) {
+                              deleteExpense(exp.id);
+                            }
+                          }}
+                          className="p-1 text-[var(--text-faint)] hover:text-red-400 rounded"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Payment Mode *
-                  </label>
-                  <select
-                    value={formData.payment_mode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, payment_mode: e.target.value as PaymentMode })
-                    }
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    <option value="Bank">Bank / NEFT / RTGS</option>
-                    <option value="UPI">UPI / QR Code</option>
-                    <option value="Cash">Cash Petty</option>
-                  </select>
-                </div>
+                    <h4 className="font-medium text-sm text-[var(--text)] line-clamp-2 mt-1">
+                      {exp.description}
+                    </h4>
 
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Invoice / Transaction Ref
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.reference_number}
-                    onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })}
-                    placeholder="INV-2026/891 or UTR..."
-                    className="w-full text-xs font-mono p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                </div>
-              </div>
+                    <div className="mt-3 pt-2.5 border-t border-[var(--border-soft)] space-y-1 text-xs text-[var(--text-dim)]">
+                      <div className="flex justify-between">
+                        <span className="text-[var(--text-faint)]">Project:</span>
+                        <span className="font-medium text-[var(--text)] truncate max-w-[180px]">
+                          {proj?.project_name || 'Direct'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-[var(--text-faint)]">Supplier:</span>
+                        <span className="truncate max-w-[180px]">{vendor?.vendor_name || 'Direct'}</span>
+                      </div>
+                      {exp.reference_number && exp.reference_number !== 'N/A' && (
+                        <div className="flex justify-between font-mono text-[11px]">
+                          <span className="text-[var(--text-faint)]">Ref / Inv:</span>
+                          <span className="truncate max-w-[180px]">{exp.reference_number}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-              {/* Attachment */}
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Bill / Voucher Scan (URL or Upload)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={formData.attachment}
-                    onChange={(e) => setFormData({ ...formData, attachment: e.target.value })}
-                    placeholder="https://... image link"
-                    className="flex-1 text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                  <label className="px-3 py-2 border border-[#4A4038] hover:border-[#8A7145] text-[#B4A697] hover:text-[#F0E9DF] text-xs font-medium rounded cursor-pointer transition-colors shrink-0">
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*,.pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (evt) => {
-                            setFormData({ ...formData, attachment: evt.target?.result as string });
-                          };
-                          reader.readAsDataURL(file);
+                  <div className="mt-4 pt-3 border-t border-[var(--border-soft)] flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono text-[var(--text-faint)] block">
+                        {exp.payment_status} ({exp.payment_mode})
+                      </span>
+                      <span className="font-mono font-medium text-[var(--accent)] text-base">
+                        {currency} {Number(exp.amount).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    {exp.attachment ? (
+                      <button
+                        onClick={() =>
+                          setViewingReceipt({
+                            isOpen: true,
+                            title: `Receipt: ${exp.description}`,
+                            subtitle: `${proj?.project_name || ''} · ${exp.reference_number}`,
+                            imageUrl: exp.attachment,
+                            referenceNumber: exp.reference_number,
+                          })
                         }
-                      }}
-                      className="hidden"
-                    />
-                  </label>
+                        className="p-1.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors"
+                        title="View Receipt"
+                      >
+                        <FileImage className="w-4 h-4" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-
-              {/* Remarks */}
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Remarks / Notes
-                </label>
-                <textarea
-                  rows={2}
-                  value={formData.remarks}
-                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
-                  placeholder="Optional site inspection notes, verification status..."
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              {/* Modal Footer Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#38322C]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    if (onCloseCreateModal) onCloseCreateModal();
-                  }}
-                  className="px-4 py-2 text-xs font-medium text-[#B4A697] hover:text-[#F0E9DF] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all shadow-xs"
-                >
-                  {editingExpense ? 'Save Changes' : 'Record Expense'}
-                </button>
-              </div>
-            </form>
-          </div>
+              );
+            })
+          )}
         </div>
       )}
+
+      {/* Dedicated Expense Modal for Create / Edit */}
+      <ExpenseModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingExpense(null);
+          if (onCloseCreateModal) onCloseCreateModal();
+        }}
+        editingExpense={editingExpense}
+      />
 
       {/* Receipt Modal */}
       <ReceiptModal

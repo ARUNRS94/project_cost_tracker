@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { ItemMaster, ItemTypeMaster, StatusActiveInactive } from '../../types/erp';
+import { ItemMaster, ItemTypeMaster, StatusActiveInactive, ViewMode } from '../../types/erp';
 import { ReceiptModal } from '../common/ReceiptModal';
+import { ViewToggle } from '../common/ViewToggle';
+import { exportMasterToCSV, downloadFile } from '../../services/api';
 import {
   Plus,
   Search,
@@ -12,12 +14,16 @@ import {
   X,
   Tags,
   Layers,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 export const ItemMasterView: React.FC = () => {
   const {
     items,
     itemTypes,
+    projects,
+    getProject,
     currency,
     addItem,
     updateItem,
@@ -29,6 +35,7 @@ export const ItemMasterView: React.FC = () => {
   } = useERP();
 
   const [subTab, setSubTab] = useState<'items' | 'types'>('items');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -54,42 +61,47 @@ export const ItemMasterView: React.FC = () => {
 
   // Item form state (NO Item ID field!)
   const initialItemState: Omit<ItemMaster, 'id'> = {
+    project_id: null,
     item_name: '',
     item_type_id: itemTypes[0]?.id || 1,
     description: '',
     status: 'Active',
     reference_picture: '',
     work_location_picture: '',
-    item_size: 'Standard',
-    default_rate: 10000,
+    item_size: '',
+    default_rate: 0,
     remark: '',
   };
   const [itemFormData, setItemFormData] = useState<Omit<ItemMaster, 'id'> & { id?: number }>(initialItemState);
 
-  // Type form state (NO Item Type ID field!)
+  // Item Type form state (NO Item Type ID field!)
   const initialTypeState: Omit<ItemTypeMaster, 'id'> = {
     description: '',
   };
   const [typeFormData, setTypeFormData] = useState<Omit<ItemTypeMaster, 'id'> & { id?: number }>(initialTypeState);
 
+  // Filtered lists
   const filteredItems = items.filter((item) => {
     const q = searchTerm.toLowerCase();
     const matchesSearch =
       !q ||
       item.item_name.toLowerCase().includes(q) ||
       item.description.toLowerCase().includes(q) ||
-      getItemType(item.item_type_id)?.description.toLowerCase().includes(q);
+      item.item_size.toLowerCase().includes(q) ||
+      item.remark.toLowerCase().includes(q);
 
-    const matchesType = typeFilter === 'all' || item.item_type_id === parseInt(typeFilter, 10);
+    const matchesType = typeFilter === 'all' || item.item_type_id === Number(typeFilter);
     const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+
     return matchesSearch && matchesType && matchesStatus;
   });
 
-  const filteredTypes = itemTypes.filter((t) => {
+  const filteredItemTypes = itemTypes.filter((t) => {
     const q = searchTerm.toLowerCase();
     return !q || t.description.toLowerCase().includes(q);
   });
 
+  // Handlers for Items
   const handleOpenCreateItem = () => {
     setEditingItem(null);
     setItemFormData({
@@ -99,16 +111,16 @@ export const ItemMasterView: React.FC = () => {
     setIsItemModalOpen(true);
   };
 
-  const handleOpenEditItem = (i: ItemMaster) => {
-    setEditingItem(i);
-    setItemFormData({ ...i });
+  const handleOpenEditItem = (item: ItemMaster) => {
+    setEditingItem(item);
+    setItemFormData({ ...item });
     setIsItemModalOpen(true);
   };
 
   const handleSaveItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemFormData.item_name || !itemFormData.item_type_id) {
-      alert('Please fill required fields: Item Name and Item Type.');
+    if (!itemFormData.item_name) {
+      alert('Please fill the Item Name.');
       return;
     }
 
@@ -120,28 +132,48 @@ export const ItemMasterView: React.FC = () => {
     } else {
       addItem({
         item_name: itemFormData.item_name,
-        item_type_id: Number(itemFormData.item_type_id),
+        item_type_id: itemFormData.item_type_id,
         description: itemFormData.description,
         status: itemFormData.status,
-        reference_picture: itemFormData.reference_picture,
-        work_location_picture: itemFormData.work_location_picture,
-        item_size: itemFormData.item_size,
+        reference_picture: itemFormData.reference_picture || '',
+        work_location_picture: itemFormData.work_location_picture || '',
+        item_size: itemFormData.item_size || '',
         default_rate: Number(itemFormData.default_rate) || 0,
-        remark: itemFormData.remark,
+        remark: itemFormData.remark || '',
       });
     }
     setIsItemModalOpen(false);
   };
 
+  const handleImageUpload = (
+    field: 'reference_picture' | 'work_location_picture',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setItemFormData((prev) => ({
+        ...prev,
+        [field]: dataUrl,
+      }));
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Handlers for Item Types
   const handleOpenCreateType = () => {
     setEditingType(null);
     setTypeFormData({ ...initialTypeState });
     setIsTypeModalOpen(true);
   };
 
-  const handleOpenEditType = (t: ItemTypeMaster) => {
-    setEditingType(t);
-    setTypeFormData({ ...t });
+  const handleOpenEditType = (type: ItemTypeMaster) => {
+    setEditingType(type);
+    setTypeFormData({ ...type });
     setIsTypeModalOpen(true);
   };
 
@@ -165,49 +197,67 @@ export const ItemMasterView: React.FC = () => {
     setIsTypeModalOpen(false);
   };
 
+  const handleExportCSV = () => {
+    if (subTab === 'items') {
+      const csv = exportMasterToCSV('Items', items);
+      downloadFile(csv, `Items_Catalog_${new Date().toISOString().split('T')[0]}.csv`);
+    } else {
+      const csv = exportMasterToCSV('ItemTypes', itemTypes);
+      downloadFile(csv, `Item_Types_${new Date().toISOString().split('T')[0]}.csv`);
+    }
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Header with Sub-tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#38322C]">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[var(--border-soft)]">
         <div>
-          <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062]">PRODUCT & FABRICATION SPECIFICATIONS</p>
-          <h1 className="font-display font-normal text-2xl text-[#F0E9DF]">
+          <h2 className="font-display font-medium text-2xl text-[var(--text)]">
             Catalog & Item Master
-          </h1>
-          <p className="text-xs text-[#B4A697] mt-0.5">
-            Reference fabrication specs, work location pictures, dimensions, and rates.
+          </h2>
+          <p className="text-xs sm:text-sm text-[var(--text-dim)] mt-0.5">
+            Reference fabrication specs, work location pictures, dimensions, and unit rates.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {/* Sub-tab switcher */}
-          <div className="flex items-center border border-[#4A4038] rounded overflow-hidden mr-2">
+          <div className="flex items-center border border-[var(--border)] rounded overflow-hidden mr-2 bg-[var(--surface)]">
             <button
               onClick={() => setSubTab('items')}
-              className={`px-3 py-1.5 text-xs transition-colors ${
+              className={`px-3 py-1.5 text-xs font-mono transition-colors ${
                 subTab === 'items'
-                  ? 'bg-[#8A7145] text-[#1E1B18] font-bold'
-                  : 'bg-[#1E1B18] text-[#B4A697] hover:text-[#F0E9DF]'
+                  ? 'bg-[var(--accent)] text-[#1E1B18] font-bold'
+                  : 'text-[var(--text-dim)] hover:text-[var(--text)]'
               }`}
             >
               Items ({items.length})
             </button>
             <button
               onClick={() => setSubTab('types')}
-              className={`px-3 py-1.5 text-xs transition-colors border-l border-[#4A4038] ${
+              className={`px-3 py-1.5 text-xs font-mono transition-colors border-l border-[var(--border)] ${
                 subTab === 'types'
-                  ? 'bg-[#8A7145] text-[#1E1B18] font-bold'
-                  : 'bg-[#1E1B18] text-[#B4A697] hover:text-[#F0E9DF]'
+                  ? 'bg-[var(--accent)] text-[#1E1B18] font-bold'
+                  : 'text-[var(--text-dim)] hover:text-[var(--text)]'
               }`}
             >
               Item Types ({itemTypes.length})
             </button>
           </div>
 
+          <button
+            onClick={handleExportCSV}
+            title="Export to CSV"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-[var(--accent)]" />
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
+
           {subTab === 'items' ? (
             <button
               onClick={handleOpenCreateItem}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all whitespace-nowrap shadow-xs"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18] transition-all whitespace-nowrap shadow-xs"
             >
               <Plus className="w-4 h-4" />
               <span>New Item</span>
@@ -215,7 +265,7 @@ export const ItemMasterView: React.FC = () => {
           ) : (
             <button
               onClick={handleOpenCreateType}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all whitespace-nowrap shadow-xs"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18] transition-all whitespace-nowrap shadow-xs"
             >
               <Plus className="w-4 h-4" />
               <span>New Item Type</span>
@@ -225,15 +275,15 @@ export const ItemMasterView: React.FC = () => {
       </div>
 
       {/* Filter toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#26221E] rounded-md border border-[#38322C]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-[#7C7062] absolute left-3 top-2.5" />
+          <Search className="w-4 h-4 text-[var(--text-faint)] absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={subTab === 'items' ? 'Search items by name, specification...' : 'Search item types...'}
-            className="w-full text-xs pl-9 pr-3 py-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] placeholder-[#7C7062] outline-none"
+            className="w-full text-xs pl-9 pr-3 py-2 rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--accent)]"
           />
         </div>
 
@@ -242,7 +292,7 @@ export const ItemMasterView: React.FC = () => {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-xs bg-[#1E1B18] border border-[#4A4038] rounded px-2.5 py-1.5 text-[#F0E9DF] outline-none cursor-pointer"
+              className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
             >
               <option value="all">All Item Types</option>
               {itemTypes.map((t) => (
@@ -255,18 +305,20 @@ export const ItemMasterView: React.FC = () => {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="text-xs bg-[#1E1B18] border border-[#4A4038] rounded px-2.5 py-1.5 text-[#F0E9DF] outline-none cursor-pointer"
+              className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
             >
               <option value="all">All Status</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
+
+            <ViewToggle mode={viewMode} onChange={setViewMode} />
           </div>
         )}
       </div>
 
-      {/* SUBTAB 1: Items Grid (NO Item ID displayed!) */}
-      {subTab === 'items' && (
+      {/* SUBTAB 1: Items Grid View */}
+      {subTab === 'items' && viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredItems.map((item) => {
             const itemType = getItemType(item.item_type_id);
@@ -274,27 +326,15 @@ export const ItemMasterView: React.FC = () => {
             return (
               <div
                 key={item.id}
-                className="p-5 bg-[#26221E] rounded-md border border-[#38322C] flex flex-col justify-between hover:border-[#4A4038] transition-all"
+                className="p-5 bg-[var(--surface)] rounded-md border border-[var(--border-soft)] flex flex-col justify-between hover:border-[var(--border)] transition-all"
               >
                 <div>
-                  {/* Header */}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${
-                            item.status === 'Active'
-                              ? 'border-[#566A5C] text-[#7C9885] bg-[#1E1B18]'
-                              : 'border-[#38322C] text-[#7C7062] bg-[#1E1B18]'
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                        <span className="text-[11px] text-[#7C7062]">
-                          {itemType ? itemType.description : 'Standard Type'}
-                        </span>
-                      </div>
-                      <h3 className="font-display font-medium text-lg text-[#F0E9DF] mt-1.5">
+                      <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                        {itemType?.description || 'Custom Item'}
+                      </span>
+                      <h3 className="font-display font-medium text-base text-[var(--text)] mt-1.5 line-clamp-1">
                         {item.item_name}
                       </h3>
                     </div>
@@ -302,8 +342,8 @@ export const ItemMasterView: React.FC = () => {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleOpenEditItem(item)}
-                        className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-                        title="Edit"
+                        className="p-1.5 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
+                        title="Edit Item"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
@@ -313,61 +353,50 @@ export const ItemMasterView: React.FC = () => {
                             deleteItem(item.id);
                           }
                         }}
-                        className="p-1.5 text-[#7C7062] hover:text-[#B5766A] rounded transition-colors"
-                        title="Delete"
+                        className="p-1.5 text-[var(--text-faint)] hover:text-red-400 rounded"
+                        title="Delete Item"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  <p className="text-xs text-[#B4A697] line-clamp-2 mt-2">
+                  <p className="text-xs text-[var(--text-dim)] line-clamp-2 mt-1 leading-relaxed">
                     {item.description}
                   </p>
 
-                  {/* Dual Pictures: Reference Spec & Work Location */}
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    {/* Reference Picture */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] text-[#7C7062]">
-                        <span>Reference Spec</span>
-                        <ImageIcon className="w-3 h-3" />
-                      </div>
+                  {/* Dual Image Gallery: Reference Picture & Work Location Picture */}
+                  <div className="mt-4 pt-3 border-t border-[var(--border-soft)]">
+                    <div className="text-[10.5px] uppercase font-mono text-[var(--text-faint)] mb-2 flex items-center justify-between">
+                      <span>Dual Photo Records</span>
+                      <span className="text-[10px] text-[var(--accent)]">Click to Inspect</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
                       <div
                         onClick={() =>
                           setImageModal({
                             isOpen: true,
                             title: `Reference Spec: ${item.item_name}`,
-                            subtitle: `Dimensions: ${item.item_size}`,
+                            subtitle: `Item Category: ${itemType?.description || 'Standard'}`,
                             imageUrl: item.reference_picture,
                           })
                         }
-                        className="h-24 w-full rounded overflow-hidden border border-[#38322C] bg-[#1E1B18] relative cursor-pointer group flex items-center justify-center"
+                        className="h-24 w-full rounded overflow-hidden border border-[var(--border)] bg-[var(--bg)] relative cursor-pointer group flex items-center justify-center"
                       >
                         {item.reference_picture ? (
                           <img
                             src={item.reference_picture}
-                            alt={item.item_name}
-                            referrerPolicy="no-referrer"
+                            alt={`${item.item_name} reference`}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
                           />
                         ) : null}
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 group-hover:bg-black/60 transition-colors">
-                          <ImageIcon className="w-4 h-4 text-[#F0E9DF]/80" />
-                          <span className="text-[10px] text-[#F0E9DF] mt-1">Inspect</span>
+                          <ImageIcon className="w-4 h-4 text-white/80" />
+                          <span className="text-[10px] text-white mt-1">Ref Spec</span>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Work Location Picture */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] text-[#7C7062]">
-                        <span>Work Location</span>
-                        <MapPin className="w-3 h-3" />
-                      </div>
                       <div
                         onClick={() =>
                           setImageModal({
@@ -377,35 +406,31 @@ export const ItemMasterView: React.FC = () => {
                             imageUrl: item.work_location_picture,
                           })
                         }
-                        className="h-24 w-full rounded overflow-hidden border border-[#38322C] bg-[#1E1B18] relative cursor-pointer group flex items-center justify-center"
+                        className="h-24 w-full rounded overflow-hidden border border-[var(--border)] bg-[var(--bg)] relative cursor-pointer group flex items-center justify-center"
                       >
                         {item.work_location_picture ? (
                           <img
                             src={item.work_location_picture}
                             alt={`${item.item_name} site position`}
-                            referrerPolicy="no-referrer"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
                           />
                         ) : null}
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 group-hover:bg-black/60 transition-colors">
-                          <MapPin className="w-4 h-4 text-[#F0E9DF]/80" />
-                          <span className="text-[10px] text-[#F0E9DF] mt-1">Site View</span>
+                          <MapPin className="w-4 h-4 text-white/80" />
+                          <span className="text-[10px] text-white mt-1">Site View</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Dimensions & Remark */}
-                  <div className="mt-3 p-2 bg-[#1E1B18] rounded text-xs space-y-1 border border-[#38322C]">
+                  <div className="mt-3 p-2 bg-[var(--bg)] rounded text-xs space-y-1 border border-[var(--border)]">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#7C7062]">Dimensions:</span>
-                      <span className="text-[#F0E9DF] font-medium">{item.item_size}</span>
+                      <span className="text-[var(--text-faint)]">Dimensions:</span>
+                      <span className="text-[var(--text)] font-medium font-mono">{item.item_size}</span>
                     </div>
                     {item.remark && (
-                      <p className="text-[10.5px] text-[#7C7062] italic border-t border-[#38322C] pt-1">
+                      <p className="text-[10.5px] text-[var(--text-faint)] italic border-t border-[var(--border-soft)] pt-1">
                         Note: {item.remark}
                       </p>
                     )}
@@ -413,9 +438,9 @@ export const ItemMasterView: React.FC = () => {
                 </div>
 
                 {/* Default Rate */}
-                <div className="mt-4 pt-3 border-t border-[#38322C] flex items-center justify-between text-xs">
-                  <span className="text-[#7C7062]">Standard Rate</span>
-                  <span className="font-mono font-medium text-[#C9A66B] tabular-nums text-sm">
+                <div className="mt-4 pt-3 border-t border-[var(--border-soft)] flex items-center justify-between text-xs">
+                  <span className="text-[var(--text-faint)]">Standard Rate</span>
+                  <span className="font-mono font-medium text-[var(--accent)] tabular-nums text-sm">
                     {currency} {(Number(item.default_rate) || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -425,338 +450,178 @@ export const ItemMasterView: React.FC = () => {
         </div>
       )}
 
-      {/* SUBTAB 2: Item Types Table (NO Item Type ID column!) */}
-      {subTab === 'types' && (
-        <div className="bg-[#26221E] rounded-md border border-[#38322C] overflow-hidden">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#1E1B18] text-[#7C7062] border-b border-[#38322C]">
-              <tr>
-                <th className="py-3 px-4 font-normal text-[10.5px] uppercase">Description / Type</th>
-                <th className="py-3 px-4 font-normal text-[10.5px] uppercase">Linked Catalog Items</th>
-                <th className="py-3 px-4 font-normal text-[10.5px] uppercase text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#38322C]/70 text-[#B4A697]">
-              {filteredTypes.map((type) => {
-                const linkedItems = items.filter((i) => i.item_type_id === type.id);
-                return (
-                  <tr key={type.id} className="hover:bg-[#302A25]/40 transition-colors">
-                    <td className="py-3 px-4 text-[#F0E9DF] font-medium text-sm">
-                      {type.description}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1.5 text-xs text-[#C9A66B]">
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>{linkedItems.length} items linked</span>
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right space-x-1">
-                      <button
-                        onClick={() => handleOpenEditType(type)}
-                        className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-                        title="Edit Type"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (window.confirm(`Delete item type "${type.description}"?`)) {
-                            deleteItemType(type.id);
-                          }
-                        }}
-                        className="p-1.5 text-[#7C7062] hover:text-[#B5766A] rounded transition-colors"
-                        title="Delete Type"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Add / Edit Item Modal (NO Item ID input field!) */}
-      {isItemModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-[#26221E] rounded-md shadow-2xl border border-[#4A4038] overflow-hidden flex flex-col max-h-[92vh]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#38322C]">
-              <h3 className="font-display text-base font-semibold text-[#F0E9DF]">
-                {editingItem ? 'Edit Item Specification' : 'Create Catalog Item'}
-              </h3>
-              <button
-                onClick={() => setIsItemModalOpen(false)}
-                className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveItem} className="p-6 space-y-4 overflow-y-auto">
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Item Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={itemFormData.item_name}
-                  onChange={(e) => setItemFormData({ ...itemFormData, item_name: e.target.value })}
-                  placeholder="e.g. 3D Acrylic Channel Letter Glow Sign"
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Item Type *
-                  </label>
-                  <select
-                    required
-                    value={itemFormData.item_type_id}
-                    onChange={(e) =>
-                      setItemFormData({
-                        ...itemFormData,
-                        item_type_id: parseInt(e.target.value, 10),
-                      })
-                    }
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    {itemTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.description}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Status *
-                  </label>
-                  <select
-                    value={itemFormData.status}
-                    onChange={(e) =>
-                      setItemFormData({
-                        ...itemFormData,
-                        status: e.target.value as StatusActiveInactive,
-                      })
-                    }
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Description
-                </label>
-                <textarea
-                  rows={2}
-                  value={itemFormData.description}
-                  onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
-                  placeholder="Material specs, IP ratings, return profiles..."
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Dimensions / Size *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={itemFormData.item_size}
-                    onChange={(e) => setItemFormData({ ...itemFormData, item_size: e.target.value })}
-                    placeholder="e.g. 18ft x 3.5ft"
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Default Rate ({currency}) *
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    step="any"
-                    value={itemFormData.default_rate}
-                    onChange={(e) =>
-                      setItemFormData({
-                        ...itemFormData,
-                        default_rate: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full text-xs font-mono font-bold p-2 rounded bg-[#1E1B18] border border-[#C9A66B] text-[#C9A66B] outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Reference Picture URL / Upload */}
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Reference Picture (URL or File)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={itemFormData.reference_picture}
-                    onChange={(e) =>
-                      setItemFormData({ ...itemFormData, reference_picture: e.target.value })
-                    }
-                    placeholder="https://... image link"
-                    className="flex-1 text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                  <label className="px-3 py-2 border border-[#4A4038] hover:border-[#8A7145] text-[#B4A697] hover:text-[#F0E9DF] text-xs font-medium rounded cursor-pointer transition-colors shrink-0">
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (evt) => {
-                            setItemFormData({
-                              ...itemFormData,
-                              reference_picture: evt.target?.result as string,
-                            });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Work Location Picture URL / Upload */}
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Work Location Picture (Site Placement)
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={itemFormData.work_location_picture}
-                    onChange={(e) =>
-                      setItemFormData({ ...itemFormData, work_location_picture: e.target.value })
-                    }
-                    placeholder="https://... site mounting position"
-                    className="flex-1 text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                  <label className="px-3 py-2 border border-[#4A4038] hover:border-[#8A7145] text-[#B4A697] hover:text-[#F0E9DF] text-xs font-medium rounded cursor-pointer transition-colors shrink-0">
-                    Upload
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (evt) => {
-                            setItemFormData({
-                              ...itemFormData,
-                              work_location_picture: evt.target?.result as string,
-                            });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Remark / Installation Advisory
-                </label>
-                <input
-                  type="text"
-                  value={itemFormData.remark}
-                  onChange={(e) => setItemFormData({ ...itemFormData, remark: e.target.value })}
-                  placeholder="e.g. Scaffolding lift required for mounting"
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#38322C]">
-                <button
-                  type="button"
-                  onClick={() => setIsItemModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-[#B4A697] hover:text-[#F0E9DF] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all shadow-xs"
-                >
-                  {editingItem ? 'Save Changes' : 'Create Item'}
-                </button>
-              </div>
-            </form>
+      {/* SUBTAB 1: Items List View */}
+      {subTab === 'items' && viewMode === 'list' && (
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-faint)] font-mono text-[11px] uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-14">Ref Photo</th>
+                  <th className="py-2.5 px-3 w-14">Site Photo</th>
+                  <th className="py-2.5 px-3">Item Name & Specs</th>
+                  <th className="py-2.5 px-3">Item Type</th>
+                  <th className="py-2.5 px-3">Dimensions</th>
+                  <th className="py-2.5 px-3 text-right">Default Rate</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-soft)]">
+                {filteredItems.map((item) => {
+                  const itemType = getItemType(item.item_type_id);
+                  return (
+                    <tr key={item.id} className="hover:bg-[var(--surface-2)]/40 transition-colors">
+                      <td className="py-2.5 px-3">
+                        {item.reference_picture ? (
+                          <img
+                            src={item.reference_picture}
+                            alt="Ref"
+                            onClick={() =>
+                              setImageModal({
+                                isOpen: true,
+                                title: `Reference: ${item.item_name}`,
+                                imageUrl: item.reference_picture,
+                              })
+                            }
+                            className="w-10 h-10 object-cover rounded border border-[var(--border)] cursor-pointer hover:opacity-80"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--text-faint)]">
+                            <ImageIcon className="w-4 h-4" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {item.work_location_picture ? (
+                          <img
+                            src={item.work_location_picture}
+                            alt="Site"
+                            onClick={() =>
+                              setImageModal({
+                                isOpen: true,
+                                title: `Site Location: ${item.item_name}`,
+                                imageUrl: item.work_location_picture,
+                              })
+                            }
+                            className="w-10 h-10 object-cover rounded border border-[var(--border)] cursor-pointer hover:opacity-80"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--text-faint)]">
+                            <MapPin className="w-4 h-4" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 font-medium text-[var(--text)]">
+                        <div>
+                          <span>{item.item_name}</span>
+                          <p className="text-[11px] text-[var(--text-dim)] truncate max-w-xs">{item.description}</p>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                          {itemType?.description || 'Custom Item'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[var(--text-dim)]">{item.item_size}</td>
+                      <td className="py-2.5 px-3 text-right font-mono text-[var(--accent)] font-medium">
+                        {currency} {(Number(item.default_rate) || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                            item.status === 'Active'
+                              ? 'text-green-400 bg-green-950/30'
+                              : 'text-[var(--text-faint)] bg-[var(--surface-2)]'
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right space-x-1">
+                        <button
+                          onClick={() => handleOpenEditItem(item)}
+                          className="p-1 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Delete item "${item.item_name}"?`)) {
+                              deleteItem(item.id);
+                            }
+                          }}
+                          className="p-1 text-[var(--text-faint)] hover:text-red-400 rounded"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Add / Edit Item Type Modal (NO Item Type ID input field!) */}
-      {isTypeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-md bg-[#26221E] rounded-md shadow-2xl border border-[#4A4038] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#38322C]">
-              <h3 className="font-display text-base font-semibold text-[#F0E9DF]">
-                {editingType ? 'Edit Item Type' : 'Create Item Type'}
-              </h3>
-              <button
-                onClick={() => setIsTypeModalOpen(false)}
-                className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveType} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Type Description *
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={typeFormData.description}
-                  onChange={(e) => setTypeFormData({ ...typeFormData, description: e.target.value })}
-                  placeholder="e.g. Architectural Metal & Acrylic Fabrication"
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#38322C]">
-                <button
-                  type="button"
-                  onClick={() => setIsTypeModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-[#B4A697] hover:text-[#F0E9DF] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all shadow-xs"
-                >
-                  {editingType ? 'Save Changes' : 'Create Item Type'}
-                </button>
-              </div>
-            </form>
+      {/* SUBTAB 2: Item Types Table */}
+      {subTab === 'types' && (
+        <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-faint)] font-mono text-[11px] uppercase tracking-wider">
+                  <th className="py-2.5 px-4 font-normal">Item Type / Category</th>
+                  <th className="py-2.5 px-4 font-normal">Items Cataloged</th>
+                  <th className="py-2.5 px-4 text-right font-normal">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-soft)]">
+                {filteredItemTypes.map((type) => {
+                  const associatedItemsCount = items.filter((it) => it.item_type_id === type.id).length;
+                  return (
+                    <tr key={type.id} className="hover:bg-[var(--surface-2)]/40 transition-colors">
+                      <td className="py-3 px-4 text-[var(--text)] font-medium flex items-center gap-2.5">
+                        <Layers className="w-4 h-4 text-[var(--accent)] shrink-0" />
+                        <span>{type.description}</span>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-[var(--text-dim)]">
+                        {associatedItemsCount} catalog item{associatedItemsCount !== 1 ? 's' : ''}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleOpenEditType(type)}
+                            className="p-1 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
+                            title="Edit Type"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (associatedItemsCount > 0) {
+                                alert(`Cannot delete this type because ${associatedItemsCount} items are linked to it.`);
+                                return;
+                              }
+                              if (window.confirm(`Delete item type "${type.description}"?`)) {
+                                deleteItemType(type.id);
+                              }
+                            }}
+                            className="p-1 text-[var(--text-faint)] hover:text-red-400 rounded"
+                            title="Delete Type"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -768,7 +633,365 @@ export const ItemMasterView: React.FC = () => {
         title={imageModal.title}
         subtitle={imageModal.subtitle}
         imageUrl={imageModal.imageUrl}
+        referenceNumber={imageModal.referenceNumber}
       />
+
+      {/* CREATE / EDIT ITEM MODAL */}
+      {isItemModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-soft)]">
+              <div>
+                <h3 className="font-display font-medium text-lg text-[var(--text)]">
+                  {editingItem ? 'Edit Item Specification' : 'Add Catalog Item'}
+                </h3>
+                <p className="text-xs text-[var(--text-faint)]">Auto-increment identity in Supabase</p>
+              </div>
+              <button
+                onClick={() => setIsItemModalOpen(false)}
+                className="text-[var(--text-faint)] hover:text-[var(--text)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveItem} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Item Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={itemFormData.item_name}
+                  onChange={(e) => setItemFormData({ ...itemFormData, item_name: e.target.value })}
+                  placeholder="e.g. LED Backlit Acrylic Architectural Signage Lettering"
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Item Type Category *</label>
+                  <select
+                    required
+                    value={itemFormData.item_type_id}
+                    onChange={(e) =>
+                      setItemFormData({ ...itemFormData, item_type_id: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                  >
+                    {itemTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Status</label>
+                  <select
+                    value={itemFormData.status}
+                    onChange={(e) =>
+                      setItemFormData({ ...itemFormData, status: e.target.value as StatusActiveInactive })
+                    }
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">
+                  Associated Project (Scope)
+                </label>
+                <select
+                  value={itemFormData.project_id || ''}
+                  onChange={(e) =>
+                    setItemFormData({
+                      ...itemFormData,
+                      project_id: e.target.value ? Number(e.target.value) : null,
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                >
+                  <option value="">General Catalog / All Projects</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.project_name} (Client: {p.client_id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Description & Material Specs</label>
+                <textarea
+                  rows={2}
+                  value={itemFormData.description}
+                  onChange={(e) => setItemFormData({ ...itemFormData, description: e.target.value })}
+                  placeholder="Material grade, wattage, finish, mounting bracket requirements..."
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Item Size / Dimensions</label>
+                  <input
+                    type="text"
+                    value={itemFormData.item_size}
+                    onChange={(e) => setItemFormData({ ...itemFormData, item_size: e.target.value })}
+                    placeholder="e.g. 12 ft x 3.5 ft x 4 inch"
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Standard Default Rate (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={itemFormData.default_rate}
+                    onChange={(e) =>
+                      setItemFormData({ ...itemFormData, default_rate: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Reference Picture Upload */}
+                <div className="p-3 rounded bg-[var(--surface)] border border-[var(--border)] flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-mono text-[var(--text)] font-semibold flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-[var(--accent)]" />
+                      <span>Reference Picture</span>
+                    </label>
+                    {itemFormData.reference_picture && (
+                      <button
+                        type="button"
+                        onClick={() => setItemFormData((prev) => ({ ...prev, reference_picture: '' }))}
+                        className="text-[11px] text-red-500 hover:text-red-400 flex items-center gap-1 cursor-pointer"
+                        title="Remove reference picture"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {itemFormData.reference_picture ? (
+                    <div className="flex items-center gap-3">
+                      <div className="relative group shrink-0">
+                        <img
+                          src={itemFormData.reference_picture}
+                          alt="Reference preview"
+                          className="w-16 h-16 object-cover rounded border border-[var(--border)] bg-[var(--bg)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setImageModal({
+                              isOpen: true,
+                              title: `Reference: ${itemFormData.item_name || 'Item'}`,
+                              subtitle: 'Item Reference Photo Preview',
+                              imageUrl: itemFormData.reference_picture,
+                            })
+                          }
+                          className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center rounded text-[10px] font-mono transition-opacity cursor-pointer"
+                        >
+                          View
+                        </button>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-mono font-medium truncate">
+                          ✓ Photo Loaded
+                        </p>
+                        <label className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded bg-[var(--surface-2)] hover:bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] cursor-pointer transition-colors">
+                          <Upload className="w-3 h-3 text-[var(--accent)]" />
+                          <span>Change Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleImageUpload('reference_picture', e)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center p-4 border border-dashed border-[var(--border)] hover:border-[var(--accent)] rounded bg-[var(--bg)] hover:bg-[var(--surface-2)] cursor-pointer text-center transition-colors group">
+                      <Upload className="w-5 h-5 text-[var(--accent)] group-hover:scale-110 transition-transform mb-1" />
+                      <span className="text-xs font-semibold text-[var(--text)]">Upload Reference Photo</span>
+                      <span className="text-[10px] text-[var(--text-faint)] mt-0.5">Click to choose image file</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload('reference_picture', e)}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* Work Location Picture Upload */}
+                <div className="p-3 rounded bg-[var(--surface)] border border-[var(--border)] flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-mono text-[var(--text)] font-semibold flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-[var(--accent)]" />
+                      <span>Work Location Picture</span>
+                    </label>
+                    {itemFormData.work_location_picture && (
+                      <button
+                        type="button"
+                        onClick={() => setItemFormData((prev) => ({ ...prev, work_location_picture: '' }))}
+                        className="text-[11px] text-red-500 hover:text-red-400 flex items-center gap-1 cursor-pointer"
+                        title="Remove location picture"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {itemFormData.work_location_picture ? (
+                    <div className="flex items-center gap-3">
+                      <div className="relative group shrink-0">
+                        <img
+                          src={itemFormData.work_location_picture}
+                          alt="Location preview"
+                          className="w-16 h-16 object-cover rounded border border-[var(--border)] bg-[var(--bg)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setImageModal({
+                              isOpen: true,
+                              title: `Location: ${itemFormData.item_name || 'Item'}`,
+                              subtitle: 'Item Site Installation Photo Preview',
+                              imageUrl: itemFormData.work_location_picture,
+                            })
+                          }
+                          className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center rounded text-[10px] font-mono transition-opacity cursor-pointer"
+                        >
+                          View
+                        </button>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-mono font-medium truncate">
+                          ✓ Photo Loaded
+                        </p>
+                        <label className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-mono rounded bg-[var(--surface-2)] hover:bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] cursor-pointer transition-colors">
+                          <Upload className="w-3 h-3 text-[var(--accent)]" />
+                          <span>Change Photo</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => handleImageUpload('work_location_picture', e)}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center p-4 border border-dashed border-[var(--border)] hover:border-[var(--accent)] rounded bg-[var(--bg)] hover:bg-[var(--surface-2)] cursor-pointer text-center transition-colors group">
+                      <Upload className="w-5 h-5 text-[var(--accent)] group-hover:scale-110 transition-transform mb-1" />
+                      <span className="text-xs font-semibold text-[var(--text)]">Upload Work Location Photo</span>
+                      <span className="text-[10px] text-[var(--text-faint)] mt-0.5">Façade, wall or site photo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleImageUpload('work_location_picture', e)}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Remarks & Technical Notes</label>
+                <input
+                  type="text"
+                  value={itemFormData.remark}
+                  onChange={(e) => setItemFormData({ ...itemFormData, remark: e.target.value })}
+                  placeholder="Warranty period, maintenance notes, certifications..."
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-soft)]">
+                <button
+                  type="button"
+                  onClick={() => setIsItemModalOpen(false)}
+                  className="px-4 py-2 text-xs font-mono text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)] rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18]"
+                >
+                  {editingItem ? 'Save Changes' : 'Create Item'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE / EDIT ITEM TYPE MODAL */}
+      {isTypeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg max-w-md w-full p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-soft)]">
+              <div>
+                <h3 className="font-display font-medium text-lg text-[var(--text)]">
+                  {editingType ? 'Edit Item Type' : 'Add Item Type'}
+                </h3>
+                <p className="text-xs text-[var(--text-faint)]">Auto-increment identity in Supabase</p>
+              </div>
+              <button
+                onClick={() => setIsTypeModalOpen(false)}
+                className="text-[var(--text-faint)] hover:text-[var(--text)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveType} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Description / Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={typeFormData.description}
+                  onChange={(e) => setTypeFormData({ ...typeFormData, description: e.target.value })}
+                  placeholder="e.g. Architectural Acrylic Letters"
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-soft)]">
+                <button
+                  type="button"
+                  onClick={() => setIsTypeModalOpen(false)}
+                  className="px-4 py-2 text-xs font-mono text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)] rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18]"
+                >
+                  {editingType ? 'Save Changes' : 'Create Type'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

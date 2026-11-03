@@ -6,6 +6,7 @@ import {
   Briefcase,
   AlertCircle,
   ChevronRight,
+  Plus,
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -50,76 +51,69 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
     categoryMap[catName].amount += Number(e.amount) || 0;
     categoryMap[catName].count += 1;
   });
-  const categoryList = Object.values(categoryMap).sort((a, b) => b.amount - a.amount);
 
-  // Payment Mode breakdown
-  const modeBreakdown: { [mode: string]: number } = { Bank: 0, UPI: 0, Cash: 0 };
-  expenses.forEach((e) => {
-    if (modeBreakdown[e.payment_mode] !== undefined) {
-      modeBreakdown[e.payment_mode] += Number(e.amount) || 0;
-    }
-  });
+  const categoriesRanked = Object.values(categoryMap).sort((a, b) => b.amount - a.amount);
 
   return (
     <div className="space-y-6">
-      {/* 4 Primary Financial KPI Cards matching hero grid in price-calculator.html */}
+      {/* 4 Primary Financial KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Approved Budget */}
-        <div className="p-4 bg-[#26221E] rounded-md border border-[#38322C]">
-          <div className="flex items-center justify-between text-xs text-[#7C7062] mb-1">
+        <div className="p-4 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
+          <div className="flex items-center justify-between text-xs text-[var(--text-faint)] mb-1">
             <span>Approved Budget</span>
-            <Briefcase className="w-3.5 h-3.5 text-[#7C7062]" />
+            <Briefcase className="w-3.5 h-3.5 text-[var(--text-faint)]" />
           </div>
-          <div className="text-2xl font-mono tabular-nums text-[#C9A66B] font-medium">
-            <span className="text-xs text-[#7C7062] mr-1 font-sans">{currency}</span>
+          <div className="text-2xl font-mono tabular-nums text-[var(--accent)] font-medium">
+            <span className="text-xs text-[var(--text-faint)] mr-1 font-sans">{currency}</span>
             {totalApprovedBudget.toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-[#7C7062] mt-2">
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">
             Across {projects.length} contracted projects
           </p>
         </div>
 
         {/* Expenses Incurred */}
-        <div className="p-4 bg-[#26221E] rounded-md border border-[#38322C]">
-          <div className="flex items-center justify-between text-xs text-[#7C7062] mb-1">
+        <div className="p-4 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
+          <div className="flex items-center justify-between text-xs text-[var(--text-faint)] mb-1">
             <span>Incurred Costs</span>
-            <Receipt className="w-3.5 h-3.5 text-[#C9A66B]" />
+            <Receipt className="w-3.5 h-3.5 text-[var(--accent)]" />
           </div>
-          <div className="text-2xl font-mono tabular-nums text-[#C9A66B] font-medium">
-            <span className="text-xs text-[#7C7062] mr-1 font-sans">{currency}</span>
+          <div className="text-2xl font-mono tabular-nums text-[var(--accent)] font-medium">
+            <span className="text-xs text-[var(--text-faint)] mr-1 font-sans">{currency}</span>
             {totalExpenses.toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-[#7C7062] mt-2">
-            <span className="text-[#C9A66B] font-mono">{budgetUtilization.toFixed(1)}%</span> of budget utilized
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">
+            <span className="text-[var(--accent)] font-mono">{budgetUtilization.toFixed(1)}%</span> of budget utilized
           </p>
         </div>
 
         {/* Remaining Pool */}
-        <div className="p-4 bg-[#26221E] rounded-md border border-[#38322C]">
-          <div className="flex items-center justify-between text-xs text-[#7C7062] mb-1">
+        <div className="p-4 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
+          <div className="flex items-center justify-between text-xs text-[var(--text-faint)] mb-1">
             <span>Remaining Balance</span>
-            <TrendingUp className="w-3.5 h-3.5 text-[#7C9885]" />
+            <TrendingUp className="w-3.5 h-3.5 text-green-500" />
           </div>
-          <div className={`text-2xl font-mono tabular-nums font-medium ${totalVariance >= 0 ? 'text-[#7C9885]' : 'text-[#B5766A]'}`}>
-            <span className="text-xs text-[#7C7062] mr-1 font-sans">{currency}</span>
+          <div className={`text-2xl font-mono tabular-nums font-medium ${totalVariance >= 0 ? 'text-green-500' : 'text-red-400'}`}>
+            <span className="text-xs text-[var(--text-faint)] mr-1 font-sans">{currency}</span>
             {totalVariance.toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-[#7C7062] mt-2">
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">
             {totalVariance >= 0 ? 'Within approved allocations' : 'Over budget allocation'}
           </p>
         </div>
 
         {/* Pending Payables */}
-        <div className="p-4 bg-[#26221E] rounded-md border border-[#38322C]">
-          <div className="flex items-center justify-between text-xs text-[#7C7062] mb-1">
+        <div className="p-4 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
+          <div className="flex items-center justify-between text-xs text-[var(--text-faint)] mb-1">
             <span>Pending Payables</span>
-            <AlertCircle className="w-3.5 h-3.5 text-[#B4A697]" />
+            <AlertCircle className="w-3.5 h-3.5 text-[var(--text-dim)]" />
           </div>
-          <div className="text-2xl font-mono tabular-nums text-[#F0E9DF] font-medium">
-            <span className="text-xs text-[#7C7062] mr-1 font-sans">{currency}</span>
+          <div className="text-2xl font-mono tabular-nums text-[var(--text)] font-medium">
+            <span className="text-xs text-[var(--text-faint)] mr-1 font-sans">{currency}</span>
             {pendingExpenses.toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-[#7C7062] mt-2">
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">
             Paid to vendors: {currency} {paidExpenses.toLocaleString('en-IN')}
           </p>
         </div>
@@ -127,65 +121,62 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
 
       {/* Middle Section: Project Budget Burn Rates & Category Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Project Budget Progress (2 Cols) */}
-        <div className="lg:col-span-2 p-5 bg-[#26221E] rounded-md border border-[#38322C]">
+        {/* Project Budget Progress */}
+        <div className="lg:col-span-2 p-5 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062]">PROJECT ALLOCATION</p>
-              <h2 className="font-display text-base font-semibold text-[#F0E9DF]">
+              <p className="text-[10.5px] uppercase tracking-wider text-[var(--text-faint)] font-mono">PROJECT ALLOCATION</p>
+              <h2 className="font-display text-base font-semibold text-[var(--text)]">
                 Budget Utilization & Burn Rate
               </h2>
             </div>
             <button
               onClick={() => setActiveTab('projects')}
-              className="text-xs text-[#C9A66B] hover:text-[#D9B87C] flex items-center gap-1 font-medium"
+              className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1 font-mono"
             >
-              <span>All Projects</span>
+              <span>View Projects</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <div className="space-y-4">
-            {projects.map((project) => {
-              const spent = getProjectSpent(project.id);
-              const budget = Number(project.approved_budget) || 1;
+            {projects.map((p) => {
+              const spent = getProjectSpent(p.id);
+              const budget = Number(p.approved_budget) || 1;
               const pct = (spent / budget) * 100;
-              const client = getClient(project.client_id);
-              const isOver = pct > 100;
+              const client = getClient(p.client_id);
 
               return (
-                <div key={project.id} className="p-3.5 rounded bg-[#1E1B18] border border-[#38322C]">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <h3 className="font-medium text-xs text-[#F0E9DF]">
-                        {project.project_name}
-                      </h3>
-                      <p className="text-[11px] text-[#7C7062] mt-0.5">
-                        Client: {client?.client_name || 'Direct'} · Status: {project.status}
-                      </p>
+                <div key={p.id} className="p-3 bg-[var(--bg)] rounded border border-[var(--border)]">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <div className="font-medium text-[var(--text)] truncate max-w-sm">
+                      {p.project_name}
+                      <span className="text-[11px] text-[var(--text-faint)] ml-2">
+                        ({client?.client_name || 'Independent'})
+                      </span>
                     </div>
-
-                    <div className="text-right shrink-0">
-                      <span className="font-mono text-xs font-semibold tabular-nums text-[#C9A66B]">
-                        {currency} {spent.toLocaleString('en-IN')}
-                      </span>
-                      <span className="text-[11px] text-[#7C7062] font-mono">
-                        {' '}/ {currency} {budget.toLocaleString('en-IN')}
-                      </span>
-                      <p className={`text-[11px] font-mono ${isOver ? 'text-[#B5766A]' : 'text-[#7C9885]'}`}>
-                        {pct.toFixed(1)}% spent
-                      </p>
+                    <div className="font-mono text-xs text-[var(--text)] tabular-nums">
+                      {currency} {spent.toLocaleString('en-IN')} / {currency} {budget.toLocaleString('en-IN')}
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="w-full bg-[#302A25] h-1.5 rounded overflow-hidden">
+                  {/* Progress bar */}
+                  <div className="h-1.5 w-full bg-[var(--surface-2)] rounded-full overflow-hidden mt-2">
                     <div
-                      className={`h-full rounded transition-all duration-300 ${
-                        isOver ? 'bg-[#B5766A]' : 'bg-[#C9A66B]'
+                      className={`h-full transition-all duration-500 ${
+                        pct > 100
+                          ? 'bg-red-500'
+                          : pct > 80
+                          ? 'bg-amber-400'
+                          : 'bg-[var(--accent)]'
                       }`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
+                      style={{ width: `${Math.min(100, pct)}%` }}
                     />
+                  </div>
+
+                  <div className="flex justify-between text-[11px] text-[var(--text-faint)] mt-1.5 font-mono">
+                    <span>Status: {p.status}</span>
+                    <span>{pct.toFixed(1)}% burned</span>
                   </div>
                 </div>
               );
@@ -193,91 +184,84 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
           </div>
         </div>
 
-        {/* Category Breakdown & Payment Modes (1 Col) */}
-        <div className="space-y-5">
-          {/* Category Distribution */}
-          <div className="p-5 bg-[#26221E] rounded-md border border-[#38322C]">
-            <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062]">BREAKDOWN</p>
-            <h2 className="font-display text-base font-semibold text-[#F0E9DF] mb-4">
-              Expenses by Category
-            </h2>
-
-            <div className="space-y-3">
-              {categoryList.map((cat) => {
-                const pct = totalExpenses > 0 ? (cat.amount / totalExpenses) * 100 : 0;
-                return (
-                  <div key={cat.name} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#B4A697]">{cat.name}</span>
-                      <span className="font-mono tabular-nums text-[#F0E9DF] font-medium">
-                        {currency} {cat.amount.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-[#302A25] h-1 rounded overflow-hidden">
-                        <div
-                          className="h-full bg-[#8A7145] rounded"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-mono text-[#7C7062] w-7 text-right">
-                        {pct.toFixed(0)}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+        {/* Expense Category Breakdown */}
+        <div className="p-5 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10.5px] uppercase tracking-wider text-[var(--text-faint)] font-mono">COST HEADS</p>
+              <h2 className="font-display text-base font-semibold text-[var(--text)]">
+                Category Distribution
+              </h2>
             </div>
+            <button
+              onClick={() => setActiveTab('categories')}
+              className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1 font-mono"
+            >
+              <span>Manage</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          {/* Payment Mode Strip */}
-          <div className="p-4 bg-[#26221E] rounded-md border border-[#38322C]">
-            <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062] mb-2">PAYMENT DISPERSAL</p>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 rounded bg-[#1E1B18] border border-[#38322C]">
-                <p className="text-[10px] text-[#7C7062]">Bank</p>
-                <p className="font-mono text-xs font-semibold text-[#F0E9DF] mt-0.5">
-                  {currency} {modeBreakdown.Bank?.toLocaleString('en-IN') || 0}
-                </p>
-              </div>
-              <div className="p-2 rounded bg-[#1E1B18] border border-[#38322C]">
-                <p className="text-[10px] text-[#7C7062]">UPI</p>
-                <p className="font-mono text-xs font-semibold text-[#F0E9DF] mt-0.5">
-                  {currency} {modeBreakdown.UPI?.toLocaleString('en-IN') || 0}
-                </p>
-              </div>
-              <div className="p-2 rounded bg-[#1E1B18] border border-[#38322C]">
-                <p className="text-[10px] text-[#7C7062]">Cash</p>
-                <p className="font-mono text-xs font-semibold text-[#F0E9DF] mt-0.5">
-                  {currency} {modeBreakdown.Cash?.toLocaleString('en-IN') || 0}
-                </p>
-              </div>
-            </div>
+          <div className="space-y-3">
+            {categoriesRanked.slice(0, 6).map((c) => {
+              const share = totalExpenses > 0 ? (c.amount / totalExpenses) * 100 : 0;
+              return (
+                <div key={c.name} className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--text)] font-medium">{c.name}</span>
+                    <span className="font-mono text-[var(--text)] tabular-nums">
+                      {currency} {c.amount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+
+                  <div className="h-1 w-full bg-[var(--surface-2)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[var(--accent)] rounded-full"
+                      style={{ width: `${share}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-[10.5px] text-[var(--text-faint)] font-mono">
+                    <span>{c.count} expense vouchers</span>
+                    <span>{share.toFixed(1)}%</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* Recent Activity Table (NO ID column!) */}
-      <div className="p-5 bg-[#26221E] rounded-md border border-[#38322C]">
+      {/* Recent Expenditures Ledger Table */}
+      <div className="p-5 bg-[var(--surface)] rounded-md border border-[var(--border-soft)]">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062]">RECENT TRANSACTIONS</p>
-            <h2 className="font-display text-base font-semibold text-[#F0E9DF]">
-              Latest Recorded Expenditures
+            <p className="text-[10.5px] uppercase tracking-wider text-[var(--text-faint)] font-mono">ACTIVITY STREAM</p>
+            <h2 className="font-display text-base font-semibold text-[var(--text)]">
+              Latest Expense Vouchers
             </h2>
           </div>
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className="text-xs text-[#C9A66B] hover:text-[#D9B87C] flex items-center gap-1 font-medium"
-          >
-            <span>Full Ledger</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenNewExpense}
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded bg-[var(--accent)] text-[#1E1B18] transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Record</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('expenses')}
+              className="text-xs text-[var(--accent)] hover:underline inline-flex items-center gap-1 font-mono"
+            >
+              <span>Full Ledger</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="text-[#7C7062] border-b border-[#38322C]">
+          <table className="w-full text-left text-xs whitespace-nowrap">
+            <thead className="bg-[var(--surface-2)] text-[var(--text-faint)] border-b border-[var(--border-soft)] font-mono">
               <tr>
                 <th className="py-2.5 px-3 font-normal text-[10.5px] uppercase">Date</th>
                 <th className="py-2.5 px-3 font-normal text-[10.5px] uppercase">Project</th>
@@ -288,17 +272,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
                 <th className="py-2.5 px-3 font-normal text-[10.5px] uppercase">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#38322C]/60 text-[#B4A697]">
+            <tbody className="divide-y divide-[var(--border-soft)] text-[var(--text-dim)]">
               {expenses.slice(0, 5).map((exp) => {
                 const proj = getProject(exp.project_id);
                 const cat = getExpenseCategory(exp.expense_category_id);
                 const vendor = getVendor(exp.vendor_id);
                 return (
-                  <tr key={exp.id} className="hover:bg-[#302A25]/40 transition-colors">
-                    <td className="py-2.5 px-3 font-mono text-[11px] text-[#7C7062]">
+                  <tr key={exp.id} className="hover:bg-[var(--surface-2)]/40 transition-colors">
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--text-faint)]">
                       {exp.expense_date}
                     </td>
-                    <td className="py-2.5 px-3 text-[#F0E9DF] font-medium">
+                    <td className="py-2.5 px-3 text-[var(--text)] font-medium">
                       {proj?.project_name || 'Direct Project'}
                     </td>
                     <td className="py-2.5 px-3">
@@ -307,20 +291,20 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
                     <td className="py-2.5 px-3 max-w-[200px] truncate">
                       {exp.description}
                     </td>
-                    <td className="py-2.5 px-3 text-[#B4A697]">
+                    <td className="py-2.5 px-3 text-[var(--text-dim)]">
                       {vendor?.vendor_name || 'Direct Supplier'}
                     </td>
-                    <td className="py-2.5 px-3 font-mono text-right text-[#C9A66B] font-medium tabular-nums">
-                      {currency} {(Number(exp.amount) || 0).toLocaleString('en-IN')}
+                    <td className="py-2.5 px-3 text-right font-mono text-[var(--accent)] font-medium">
+                      {currency} {Number(exp.amount).toLocaleString('en-IN')}
                     </td>
                     <td className="py-2.5 px-3">
-                      <span className={`text-[11px] font-medium ${
-                        exp.payment_status === 'Paid'
-                          ? 'text-[#7C9885]'
-                          : exp.payment_status === 'Partial'
-                          ? 'text-[#C9A66B]'
-                          : 'text-[#B5766A]'
-                      }`}>
+                      <span
+                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          exp.payment_status === 'Paid'
+                            ? 'bg-green-950/20 text-green-400 border-green-800/30'
+                            : 'bg-amber-950/20 text-amber-400 border-amber-800/30'
+                        }`}
+                      >
                         {exp.payment_status}
                       </span>
                     </td>

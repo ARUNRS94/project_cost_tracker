@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { ProjectMaster, ProjectStatus } from '../../types/erp';
+import { ProjectMaster, ProjectStatus, ViewMode } from '../../types/erp';
+import { ViewToggle } from '../common/ViewToggle';
+import { exportMasterToCSV, downloadFile } from '../../services/api';
 import {
   Plus,
   Search,
@@ -10,6 +12,7 @@ import {
   Trash2,
   X,
   ChevronRight,
+  Download,
 } from 'lucide-react';
 
 export const ProjectMasterView: React.FC = () => {
@@ -27,6 +30,7 @@ export const ProjectMasterView: React.FC = () => {
     getVendor,
   } = useERP();
 
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -77,7 +81,7 @@ export const ProjectMasterView: React.FC = () => {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.project_name || !formData.client_id) {
-      alert('Please fill all required fields: Project Name and Client.');
+      alert('Please fill required fields: Project Name and Client.');
       return;
     }
 
@@ -89,7 +93,7 @@ export const ProjectMasterView: React.FC = () => {
     } else {
       addProject({
         project_name: formData.project_name,
-        client_id: Number(formData.client_id),
+        client_id: formData.client_id,
         description: formData.description,
         start_date: formData.start_date,
         end_date: formData.end_date,
@@ -100,239 +104,483 @@ export const ProjectMasterView: React.FC = () => {
     setIsModalOpen(false);
   };
 
+  const handleExportCSV = () => {
+    const csv = exportMasterToCSV('Projects', projects);
+    downloadFile(csv, `Projects_Master_${new Date().toISOString().split('T')[0]}.csv`);
+  };
+
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#38322C]">
+    <div className="space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-4 pb-4 border-b border-[var(--border-soft)]">
         <div>
-          <p className="text-[10.5px] uppercase tracking-wider text-[#7C7062]">PROJECT REPOSITORY</p>
-          <h1 className="font-display font-normal text-2xl text-[#F0E9DF]">
+          <h2 className="font-display font-medium text-2xl text-[var(--text)]">
             Project Master
-          </h1>
-          <p className="text-xs text-[#B4A697] mt-0.5">
-            Client contracts, budget allocations, and execution schedules.
+          </h2>
+          <p className="text-xs sm:text-sm text-[var(--text-dim)] mt-0.5">
+            Active engagements, contract budgets, delivery timelines, and expense burn rates.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreate}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all whitespace-nowrap shadow-xs"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Project</span>
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCSV}
+            title="Export Projects Master to CSV"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 text-[var(--accent)]" />
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
+
+          <button
+            onClick={handleOpenCreate}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18] transition-all shadow-xs"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Project</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[#26221E] rounded-md border border-[#38322C]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-[var(--surface)] rounded-md border border-[var(--border)]">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-[#7C7062] absolute left-3 top-2.5" />
+          <Search className="w-4 h-4 text-[var(--text-faint)] absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search projects by name, client, description..."
-            className="w-full text-xs pl-9 pr-3 py-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] placeholder-[#7C7062] outline-none"
+            className="w-full text-xs pl-9 pr-3 py-2 rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--accent)]"
           />
         </div>
 
-        {/* Status filter toggle */}
-        <div className="flex items-center border border-[#4A4038] rounded overflow-hidden">
-          {(['all', 'Planning', 'Active', 'Completed'] as const).map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 text-xs transition-colors ${
-                statusFilter === st
-                  ? 'bg-[#8A7145] text-[#1E1B18] font-bold'
-                  : 'bg-[#1E1B18] text-[#B4A697] hover:text-[#F0E9DF]'
-              }`}
-            >
-              {st === 'all' ? 'All' : st}
-            </button>
-          ))}
+        <div className="flex items-center gap-2.5">
+          {/* Status filter toggle */}
+          <div className="flex items-center border border-[var(--border)] rounded overflow-hidden">
+            {(['all', 'Planning', 'Active', 'Completed'] as const).map((st) => (
+              <button
+                key={st}
+                onClick={() => setStatusFilter(st)}
+                className={`px-3 py-1.5 text-xs font-mono transition-colors ${
+                  statusFilter === st
+                    ? 'bg-[var(--accent)] text-[#1E1B18] font-bold'
+                    : 'bg-[var(--bg)] text-[var(--text-dim)] hover:text-[var(--text)]'
+                }`}
+              >
+                {st === 'all' ? 'All' : st}
+              </button>
+            ))}
+          </div>
+
+          <ViewToggle mode={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
-      {/* Project Cards (NO PROJECT ID displayed!) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredProjects.map((project) => {
-          const client = getClient(project.client_id);
-          const spent = getProjectSpent(project.id);
-          const budget = Number(project.approved_budget) || 1;
-          const variance = budget - spent;
-          const pct = (spent / budget) * 100;
-          const projectExpenses = getProjectExpenses(project.id);
+      {/* GRID VIEW */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredProjects.map((project) => {
+            const client = getClient(project.client_id);
+            const spent = getProjectSpent(project.id);
+            const budget = Number(project.approved_budget) || 1;
+            const variance = budget - spent;
+            const pct = (spent / budget) * 100;
+            const projectExpenses = getProjectExpenses(project.id);
 
-          return (
-            <div
-              key={project.id}
-              className="p-5 bg-[#26221E] rounded-md border border-[#38322C] flex flex-col justify-between hover:border-[#4A4038] transition-all"
-            >
-              <div>
-                {/* Header */}
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <div>
-                    <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-[#1E1B18] text-[#C9A66B] border border-[#38322C]">
-                      {project.status}
-                    </span>
-                    <h3 className="font-display font-medium text-lg text-[#F0E9DF] mt-1.5">
-                      {project.project_name}
-                    </h3>
+            return (
+              <div
+                key={project.id}
+                className="p-5 bg-[var(--surface)] rounded-md border border-[var(--border-soft)] flex flex-col justify-between hover:border-[var(--border)] transition-all"
+              >
+                <div>
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                        {project.status}
+                      </span>
+                      <h3 className="font-display font-medium text-lg text-[var(--text)] mt-1.5">
+                        {project.project_name}
+                      </h3>
+                      <div className="flex items-center gap-1.5 text-xs text-[var(--text-dim)] mt-0.5">
+                        <Building2 className="w-3.5 h-3.5 text-[var(--text-faint)]" />
+                        <span>{client?.client_name || 'Independent Project'}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(project)}
+                        className="p-1.5 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
+                        title="Edit Project"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Delete project "${project.project_name}"?`)) {
+                            deleteProject(project.id);
+                          }
+                        }}
+                        className="p-1.5 text-[var(--text-faint)] hover:text-red-400 rounded"
+                        title="Delete Project"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleOpenEdit(project)}
-                      className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
-                      title="Edit"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Delete project "${project.project_name}"?`)) {
-                          deleteProject(project.id);
-                        }
-                      }}
-                      className="p-1.5 text-[#7C7062] hover:text-[#B5766A] rounded transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <p className="text-xs text-[var(--text-dim)] line-clamp-2 mt-2 leading-relaxed">
+                    {project.description}
+                  </p>
+
+                  {/* Dates */}
+                  <div className="flex items-center gap-4 text-xs font-mono text-[var(--text-faint)] mt-3">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {project.start_date}
+                    </span>
+                    <span>→</span>
+                    <span>{project.end_date}</span>
+                  </div>
+
+                  {/* Budget Burn Meter */}
+                  <div className="mt-4 pt-3 border-t border-[var(--border-soft)]">
+                    <div className="flex justify-between items-baseline text-xs mb-1.5">
+                      <span className="text-[var(--text-dim)] text-[11px] font-mono">
+                        Budget Utilized ({pct.toFixed(1)}%)
+                      </span>
+                      <span className="font-mono text-xs text-[var(--text)]">
+                        {currency} {spent.toLocaleString('en-IN')} / {currency}{' '}
+                        {budget.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    <div className="h-1.5 w-full bg-[var(--surface-2)] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-500 ${
+                          pct > 100
+                            ? 'bg-red-500'
+                            : pct > 80
+                            ? 'bg-amber-400'
+                            : 'bg-[var(--accent)]'
+                        }`}
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between text-[11px] font-mono text-[var(--text-faint)] mt-1.5">
+                      <span>Available Balance</span>
+                      <span className={variance < 0 ? 'text-red-400 font-semibold' : 'text-green-400'}>
+                        {currency} {variance.toLocaleString('en-IN')}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <p className="text-xs text-[#B4A697] line-clamp-2 mt-1">
-                  {project.description}
-                </p>
-
-                {/* Client info & dates (NO IDs!) */}
-                <div className="flex items-center gap-2 text-xs text-[#B4A697] mt-3 pt-3 border-t border-[#38322C]">
-                  <Building2 className="w-3.5 h-3.5 text-[#C9A66B] shrink-0" />
-                  <span className="font-medium text-[#F0E9DF] truncate">
-                    {client?.client_name || 'Direct Client'}
+                {/* View Ledger Button */}
+                <div className="mt-4 pt-3 border-t border-[var(--border-soft)] flex items-center justify-between">
+                  <span className="text-xs font-mono text-[var(--text-faint)]">
+                    {projectExpenses.length} expense voucher{projectExpenses.length !== 1 ? 's' : ''}
                   </span>
-                </div>
 
-                <div className="flex items-center gap-1.5 text-[11px] font-mono text-[#7C7062] mt-1.5">
-                  <Calendar className="w-3 h-3 text-[#7C7062]" />
-                  <span>{project.start_date}</span>
-                  <span>→</span>
-                  <span>{project.end_date}</span>
-                </div>
-
-                {/* Budget metric box */}
-                <div className="mt-4 p-3 bg-[#1E1B18] rounded border border-[#38322C]">
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-[#7C7062]">Approved Budget:</span>
-                    <span className="font-mono text-[#F0E9DF] font-medium tabular-nums">
-                      {currency} {budget.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs mb-2">
-                    <span className="text-[#7C7062]">Expenses Incurred:</span>
-                    <span className="font-mono text-[#C9A66B] font-medium tabular-nums">
-                      {currency} {spent.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="w-full bg-[#302A25] h-1.5 rounded overflow-hidden">
-                    <div
-                      className={`h-full rounded transition-all duration-300 ${
-                        pct > 100 ? 'bg-[#B5766A]' : 'bg-[#C9A66B]'
-                      }`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] font-mono mt-2">
-                    <span className={variance >= 0 ? 'text-[#7C9885]' : 'text-[#B5766A]'}>
-                      {variance >= 0 ? 'Balance: ' : 'Overbudget: '}
-                      {currency} {Math.abs(variance).toLocaleString('en-IN')}
-                    </span>
-                    <span className="text-[#7C7062]">{pct.toFixed(1)}%</span>
-                  </div>
+                  <button
+                    onClick={() => setSelectedProjectForLedger(project)}
+                    className="inline-flex items-center gap-1 text-xs font-mono text-[var(--accent)] hover:underline"
+                  >
+                    <span>Inspect Ledger</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      )}
 
-              {/* Bottom line */}
-              <div className="mt-4 pt-3 border-t border-[#38322C] flex items-center justify-between">
-                <span className="text-xs text-[#7C7062]">
-                  {projectExpenses.length} expense transactions
+      {/* LIST / TABLE VIEW */}
+      {viewMode === 'list' && (
+        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-md overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-faint)] font-mono text-[11px] uppercase tracking-wider">
+                  <th className="py-2.5 px-3">Project Name</th>
+                  <th className="py-2.5 px-3">Associated Client</th>
+                  <th className="py-2.5 px-3 text-right">Approved Budget</th>
+                  <th className="py-2.5 px-3 text-right">Total Spent</th>
+                  <th className="py-2.5 px-3 text-right">Remaining</th>
+                  <th className="py-2.5 px-3">Timeline</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-soft)]">
+                {filteredProjects.map((project) => {
+                  const client = getClient(project.client_id);
+                  const spent = getProjectSpent(project.id);
+                  const budget = Number(project.approved_budget) || 1;
+                  const variance = budget - spent;
+                  const pct = (spent / budget) * 100;
+
+                  return (
+                    <tr key={project.id} className="hover:bg-[var(--surface-2)]/40 transition-colors">
+                      <td className="py-3 px-3 font-medium text-[var(--text)]">
+                        <div>
+                          <span>{project.project_name}</span>
+                          <p className="text-[11px] text-[var(--text-faint)] truncate max-w-xs">{project.description}</p>
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-[var(--text-dim)]">
+                        {client?.client_name || 'Independent Project'}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono text-[var(--text)] font-medium">
+                        {currency} {budget.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono text-[var(--accent)] font-medium">
+                        {currency} {spent.toLocaleString('en-IN')}
+                      </td>
+                      <td className={`py-3 px-3 text-right font-mono font-medium ${variance < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                        {currency} {variance.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-3 font-mono text-[11px] text-[var(--text-faint)]">
+                        {project.start_date} → {project.end_date}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                          {project.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right space-x-1">
+                        <button
+                          onClick={() => setSelectedProjectForLedger(project)}
+                          className="p-1 text-[var(--accent)] hover:underline text-[11px] font-mono mr-1"
+                        >
+                          Ledger
+                        </button>
+                        <button
+                          onClick={() => handleOpenEdit(project)}
+                          className="p-1 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
+                          title="Edit"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Delete project "${project.project_name}"?`)) {
+                              deleteProject(project.id);
+                            }
+                          }}
+                          className="p-1 text-[var(--text-faint)] hover:text-red-400 rounded"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-over Drawer for Project Expenses */}
+      {selectedProjectForLedger && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-xl bg-[var(--surface)] border-l border-[var(--border)] h-full flex flex-col p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--border-soft)]">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-[var(--accent)] tracking-wider">
+                  Ledger Statement
                 </span>
-                <button
-                  onClick={() => setSelectedProjectForLedger(project)}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#C9A66B] hover:text-[#D9B87C]"
-                >
-                  <span>Project Expenses Ledger</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+                <h3 className="font-display font-medium text-lg text-[var(--text)] mt-0.5">
+                  {selectedProjectForLedger.project_name}
+                </h3>
               </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Add / Edit Modal (NO Project ID input field!) */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="relative w-full max-w-lg bg-[#26221E] rounded-md shadow-2xl border border-[#4A4038] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#38322C]">
-              <h3 className="font-display text-base font-semibold text-[#F0E9DF]">
-                {editingProject ? 'Edit Project Record' : 'Create Project Record'}
-              </h3>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded transition-colors"
+                onClick={() => setSelectedProjectForLedger(null)}
+                className="p-1 text-[var(--text-faint)] hover:text-[var(--text)] rounded"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <div className="py-4 border-b border-[var(--border-soft)] grid grid-cols-3 gap-2 text-center">
+              <div className="bg-[var(--bg)] p-2.5 rounded border border-[var(--border)]">
+                <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase block">Budget</span>
+                <span className="font-mono text-xs font-semibold text-[var(--text)]">
+                  {currency} {Number(selectedProjectForLedger.approved_budget).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="bg-[var(--bg)] p-2.5 rounded border border-[var(--border)]">
+                <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase block">Spent</span>
+                <span className="font-mono text-xs font-semibold text-[var(--accent)]">
+                  {currency} {getProjectSpent(selectedProjectForLedger.id).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="bg-[var(--bg)] p-2.5 rounded border border-[var(--border)]">
+                <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase block">Available</span>
+                <span className="font-mono text-xs font-semibold text-green-400">
+                  {currency}{' '}
+                  {(
+                    Number(selectedProjectForLedger.approved_budget) -
+                    getProjectSpent(selectedProjectForLedger.id)
+                  ).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-2.5">
+              {getProjectExpenses(selectedProjectForLedger.id).length === 0 ? (
+                <div className="py-12 text-center text-xs text-[var(--text-faint)] font-mono">
+                  No expenses recorded for this project yet.
+                </div>
+              ) : (
+                getProjectExpenses(selectedProjectForLedger.id).map((e) => {
+                  const cat = getExpenseCategory(e.expense_category_id);
+                  const vendor = getVendor(e.vendor_id);
+                  return (
+                    <div
+                      key={e.id}
+                      className="p-3 bg-[var(--bg)] rounded border border-[var(--border)] flex items-start justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-mono text-[11px] text-[var(--text-faint)]">
+                            {e.expense_date}
+                          </span>
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)]">
+                            {cat?.category_name || 'General'}
+                          </span>
+                        </div>
+                        <p className="font-medium text-[var(--text)]">{e.description}</p>
+                        <p className="text-[11px] text-[var(--text-dim)] mt-0.5">
+                          Supplier: {vendor?.vendor_name || 'Direct'}
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="font-mono font-medium text-[var(--accent)] text-sm block">
+                          {currency} {Number(e.amount).toLocaleString('en-IN')}
+                        </span>
+                        <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase">
+                          {e.payment_status} ({e.payment_mode})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE / EDIT MODAL (No Project ID field) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg max-w-lg w-full p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-[var(--border-soft)]">
               <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Project Name *
-                </label>
+                <h3 className="font-display font-medium text-lg text-[var(--text)]">
+                  {editingProject ? 'Edit Project' : 'Create New Project'}
+                </h3>
+                <p className="text-xs text-[var(--text-faint)]">Auto-increment identity in Supabase</p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-[var(--text-faint)] hover:text-[var(--text)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Project Name *</label>
                 <input
                   type="text"
                   required
                   value={formData.project_name}
                   onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
-                  placeholder="e.g. Metro Retail Storefront Signage Rollout"
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
+                  placeholder="e.g. Metro Flagship Store Façade & Signage"
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Associated Client *</label>
+                <select
+                  required
+                  value={formData.client_id}
+                  onChange={(e) => setFormData({ ...formData, client_id: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
+                >
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.client_name} ({c.contact_person})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Project Scope & Details</label>
+                <textarea
+                  rows={2}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Scope of work, structural parameters, architect specifications..."
+                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Associated Client *
-                  </label>
-                  <select
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Start Date</label>
+                  <input
+                    type="date"
                     required
-                    value={formData.client_id}
-                    onChange={(e) => setFormData({ ...formData, client_id: parseInt(e.target.value, 10) })}
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  >
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.client_name}
-                      </option>
-                    ))}
-                  </select>
+                    value={formData.start_date}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Status *
-                  </label>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">End Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.end_date}
+                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Approved Budget (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={formData.approved_budget}
+                    onChange={(e) => setFormData({ ...formData, approved_budget: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] font-mono focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-mono text-[var(--text-dim)] mb-1">Status</label>
                   <select
                     value={formData.status}
                     onChange={(e) =>
                       setFormData({ ...formData, status: e.target.value as ProjectStatus })
                     }
-                    className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
+                    className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded text-xs text-[var(--text)] focus:outline-none focus:border-[var(--accent)]"
                   >
                     <option value="Planning">Planning</option>
                     <option value="Active">Active</option>
@@ -341,179 +589,22 @@ export const ProjectMasterView: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Project Details
-                </label>
-                <textarea
-                  rows={2}
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Scope, specifications, key milestones..."
-                  className="w-full text-xs p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    Start Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.start_date}
-                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    className="w-full text-xs font-mono p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-[#B4A697] mb-1">
-                    End Date (Target) *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.end_date}
-                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    className="w-full text-xs font-mono p-2 rounded bg-[#1E1B18] border border-[#4A4038] text-[#F0E9DF] outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#B4A697] mb-1">
-                  Approved Budget ({currency}) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  step="any"
-                  value={formData.approved_budget}
-                  onChange={(e) =>
-                    setFormData({ ...formData, approved_budget: parseFloat(e.target.value) || 0 })
-                  }
-                  className="w-full text-xs font-mono font-bold p-2 rounded bg-[#1E1B18] border border-[#C9A66B] text-[#C9A66B] outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-[#38322C]">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-soft)]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-[#B4A697] hover:text-[#F0E9DF] transition-colors"
+                  className="px-4 py-2 text-xs font-mono text-[var(--text-dim)] hover:text-[var(--text)] border border-[var(--border)] rounded"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold rounded bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] transition-all shadow-xs"
+                  className="px-4 py-2 text-xs font-semibold rounded bg-[var(--accent)] hover:opacity-90 text-[#1E1B18]"
                 >
                   {editingProject ? 'Save Changes' : 'Create Project'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* Project Slide-Over Ledger */}
-      {selectedProjectForLedger && (
-        <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/70 backdrop-blur-xs">
-          <div className="relative w-full max-w-2xl h-full bg-[#26221E] border-l border-[#38322C] shadow-2xl flex flex-col">
-            <div className="p-6 border-b border-[#38322C] flex items-start justify-between">
-              <div>
-                <span className="text-[10px] uppercase font-mono tracking-wider text-[#C9A66B]">
-                  PROJECT EXPENDITURE LEDGER
-                </span>
-                <h2 className="font-display text-lg font-bold text-[#F0E9DF] mt-1">
-                  {selectedProjectForLedger.project_name}
-                </h2>
-                <p className="text-xs text-[#B4A697] mt-0.5">
-                  Client: {getClient(selectedProjectForLedger.client_id)?.client_name} · Status: {selectedProjectForLedger.status}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedProjectForLedger(null)}
-                className="p-1.5 text-[#7C7062] hover:text-[#F0E9DF] rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Financial Summary */}
-            <div className="grid grid-cols-3 gap-2 p-4 bg-[#1E1B18] border-b border-[#38322C] text-center">
-              <div>
-                <p className="text-[10px] text-[#7C7062] uppercase tracking-wider">Approved Budget</p>
-                <p className="text-sm font-medium font-mono text-[#F0E9DF] tabular-nums mt-0.5">
-                  {currency} {selectedProjectForLedger.approved_budget.toLocaleString('en-IN')}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-[#7C7062] uppercase tracking-wider">Spent So Far</p>
-                <p className="text-sm font-medium font-mono text-[#C9A66B] tabular-nums mt-0.5">
-                  {currency}{' '}
-                  {getProjectSpent(selectedProjectForLedger.id).toLocaleString('en-IN')}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] text-[#7C7062] uppercase tracking-wider">Balance Pool</p>
-                <p className="text-sm font-medium font-mono text-[#7C9885] tabular-nums mt-0.5">
-                  {currency}{' '}
-                  {(
-                    selectedProjectForLedger.approved_budget -
-                    getProjectSpent(selectedProjectForLedger.id)
-                  ).toLocaleString('en-IN')}
-                </p>
-              </div>
-            </div>
-
-            {/* Expenses List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <p className="text-xs font-semibold text-[#F0E9DF] uppercase tracking-wider">
-                Line Items ({getProjectExpenses(selectedProjectForLedger.id).length})
-              </p>
-
-              {getProjectExpenses(selectedProjectForLedger.id).length === 0 ? (
-                <div className="p-8 text-center text-[#7C7062] text-xs">
-                  No line-item expenses recorded under this project yet.
-                </div>
-              ) : (
-                getProjectExpenses(selectedProjectForLedger.id).map((exp) => {
-                  const cat = getExpenseCategory(exp.expense_category_id);
-                  const vendor = getVendor(exp.vendor_id);
-                  return (
-                    <div
-                      key={exp.id}
-                      className="p-3 rounded border border-[#38322C] bg-[#1E1B18] space-y-1"
-                    >
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-[#F0E9DF] font-medium">
-                          {cat?.category_name} · {exp.description}
-                        </span>
-                        <span className="font-mono text-[#C9A66B] font-semibold tabular-nums">
-                          {currency} {(Number(exp.amount) || 0).toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[11px] text-[#7C7062] pt-1 border-t border-[#38322C]/50">
-                        <span>Vendor: {vendor?.vendor_name}</span>
-                        <span className="font-mono">{exp.expense_date} · {exp.payment_status}</span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-[#38322C] bg-[#26221E] flex justify-end">
-              <button
-                onClick={() => setSelectedProjectForLedger(null)}
-                className="px-4 py-2 text-xs font-semibold bg-[#C9A66B] hover:bg-[#D9B87C] text-[#241E17] rounded transition-colors"
-              >
-                Close Ledger
-              </button>
-            </div>
           </div>
         </div>
       )}
