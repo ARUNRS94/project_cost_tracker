@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #1E1B18;
+    --surface: #26221E;
+    --surface-2: #302A25;
+    --border: #4A4038;
+    --border-soft: #38322C;
+    --text: #F0E9DF;
+    --text-dim: #B4A697;
+    --text-faint: #7C7062;
+    --accent: #C9A66B;
+    --accent-soft: #8A7145;
+    --green: #7C9885;
+    --green-soft: #566A5C;
+    --red: #B5766A;
+
+    font-family: var(--font-ui), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.font-display {
+  font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
+}
+
+.font-mono,
+.tabular-nums {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom stone theme styling matching price-calculator.html */
+.bg-stone-bg { background-color: #1E1B18; }
+.bg-stone-surface { background-color: #26221E; }
+.bg-stone-surface-2 { background-color: #302A25; }
+.border-stone-border { border-color: #4A4038; }
+.border-stone-soft { border-color: #38322C; }
+.text-stone-text { color: #F0E9DF; }
+.text-stone-dim { color: #B4A697; }
+.text-stone-faint { color: #7C7062; }
+.text-stone-accent { color: #C9A66B; }
+.text-stone-green { color: #7C9885; }
+.text-stone-red { color: #B5766A; }
+.bg-stone-accent { background-color: #C9A66B; }
+.bg-stone-accent-soft { background-color: #8A7145; }
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1E1B18;
+}
+::-webkit-scrollbar-thumb {
+  background: #4A4038;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8A7145;
+}

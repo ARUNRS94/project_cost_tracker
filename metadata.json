@@ -1,0 +1,6 @@
+{
+  "name": "Nexora ERP - Master & Expense Management",
+  "description": "Enterprise-grade Master Data and Project Expense Management System for clients, projects, items, vendors, users, roles, and expenditure accounting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
