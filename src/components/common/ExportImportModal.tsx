@@ -466,7 +466,7 @@ export const ExportImportModal: React.FC<ExportImportModalProps> = ({
                       { id: 'vendors', label: 'Vendor Master' },
                       { id: 'items', label: 'Item & Catalog Master' },
                       { id: 'categories', label: 'Expense Category Master' },
-                      { id: 'expenses', label: 'Expense Master' },
+                      { id: 'expenses', label: 'Expenses' },
                     ] as const
                   ).map((m) => (
                     <button

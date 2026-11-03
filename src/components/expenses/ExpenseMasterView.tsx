@@ -336,7 +336,7 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
         <div>
           <p className="text-[10.5px] uppercase tracking-wider text-[var(--text-faint)] font-mono">EXPENDITURE LEDGER</p>
           <h1 className="font-display font-medium text-2xl md:text-3xl text-[var(--text)]">
-            Expense Master
+            Expense
           </h1>
           <p className="text-xs text-[var(--text-dim)] mt-0.5">
             Log site expenditures, vendor vouchers, material orders, and payment statuses.

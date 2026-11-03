@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navTabs: { id: NavTab; label: string; count?: number }[] = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'expenses', label: 'Expense Master', count: expenses.length },
+    { id: 'expenses', label: 'Expense', count: expenses.length },
     { id: 'quotation', label: 'Generate Quotation', count: quotations.length },
     { id: 'masters', label: 'Masters' },
     { id: 'team', label: 'Roles & Permissions' },
