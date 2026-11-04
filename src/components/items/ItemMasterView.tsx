@@ -331,7 +331,7 @@ export const ItemMasterView: React.FC = () => {
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                      <span className="badge-accent">
                         {itemType?.description || 'Custom Item'}
                       </span>
                       <h3 className="font-display font-medium text-base text-[var(--text)] mt-1.5 line-clamp-1">
@@ -529,11 +529,11 @@ export const ItemMasterView: React.FC = () => {
                       </td>
                       <td className="py-2.5 px-3">
                         <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                          className={
                             item.status === 'Active'
-                              ? 'text-green-400 bg-green-950/30'
-                              : 'text-[var(--text-faint)] bg-[var(--surface-2)]'
-                          }`}
+                              ? 'badge-success'
+                              : 'badge-neutral'
+                          }
                         >
                           {item.status}
                         </span>

@@ -304,11 +304,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
                     </td>
                     <td className="py-2.5 px-3">
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                        className={
                           exp.payment_status === 'Paid'
-                            ? 'bg-green-950/20 text-green-400 border-green-800/30'
-                            : 'bg-amber-950/20 text-amber-400 border-amber-800/30'
-                        }`}
+                            ? 'badge-success'
+                            : 'badge-warning'
+                        }
                       >
                         {exp.payment_status}
                       </span>

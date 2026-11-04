@@ -186,11 +186,11 @@ export const ClientMasterView: React.FC = () => {
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
                         <span
-                          className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${
+                          className={
                             client.status === 'Active'
-                              ? 'border-green-800/40 text-green-400 bg-[var(--surface-2)]'
-                              : 'border-[var(--border-soft)] text-[var(--text-faint)] bg-[var(--surface-2)]'
-                          }`}
+                              ? 'badge-success uppercase'
+                              : 'badge-neutral uppercase'
+                          }
                         >
                           {client.status}
                         </span>
@@ -308,11 +308,11 @@ export const ClientMasterView: React.FC = () => {
                       </td>
                       <td className="py-3 px-3">
                         <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                          className={
                             client.status === 'Active'
-                              ? 'border-green-800/40 text-green-400 bg-[var(--surface-2)]'
-                              : 'border-[var(--border-soft)] text-[var(--text-faint)] bg-[var(--surface-2)]'
-                          }`}
+                              ? 'badge-success'
+                              : 'badge-neutral'
+                          }
                         >
                           {client.status}
                         </span>

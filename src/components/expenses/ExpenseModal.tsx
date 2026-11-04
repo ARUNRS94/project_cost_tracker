@@ -485,7 +485,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
             {/* ========================================================================= */}
             <div className="p-4 sm:p-5 rounded-lg bg-[var(--bg)] border border-[var(--border)] space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-[var(--accent)] flex items-center gap-1.5">
+                <span className="badge-accent flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5" />
                   <span>Target Client & Project Allocation</span>
                 </span>
@@ -865,7 +865,7 @@ export const ExpenseModal: React.FC<ExpenseModalProps> = ({
                               {item.description || 'New Expense Line'}
                             </span>
                             {taggedProjectItem && (
-                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30 flex items-center gap-1">
+                              <span className="badge-accent flex items-center gap-1">
                                 <Package className="w-3 h-3" />
                                 <span>Tagged: {taggedProjectItem.item_name}</span>
                               </span>

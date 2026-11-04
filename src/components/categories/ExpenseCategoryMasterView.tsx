@@ -161,11 +161,11 @@ export const ExpenseCategoryMasterView: React.FC = () => {
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <span
-                      className={`text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded border ${
+                      className={
                         cat.status === 'Active'
-                          ? 'border-green-800/40 text-green-400 bg-[var(--surface-2)]'
-                          : 'border-[var(--border-soft)] text-[var(--text-faint)] bg-[var(--surface-2)]'
-                      }`}
+                          ? 'badge-success uppercase'
+                          : 'badge-neutral uppercase'
+                      }
                     >
                       {cat.status}
                     </span>
@@ -261,11 +261,11 @@ export const ExpenseCategoryMasterView: React.FC = () => {
                       </td>
                       <td className="py-3 px-3">
                         <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                          className={
                             cat.status === 'Active'
-                              ? 'text-green-400 bg-green-950/30'
-                              : 'text-[var(--text-faint)] bg-[var(--surface-2)]'
-                          }`}
+                              ? 'badge-success'
+                              : 'badge-neutral'
+                          }
                         >
                           {cat.status}
                         </span>

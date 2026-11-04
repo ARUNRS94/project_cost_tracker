@@ -67,7 +67,7 @@ export const MastersView: React.FC<MastersViewProps> = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border)]">
+            <span className="badge-accent">
               Core Data Masters
             </span>
           </div>
@@ -111,10 +111,10 @@ export const MastersView: React.FC<MastersViewProps> = ({
               </span>
               <span>{tab.label}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                   isActive
-                    ? 'bg-[var(--accent)] text-[#1E1B18] font-bold'
-                    : 'bg-[var(--bg)] text-[var(--text-faint)]'
+                    ? 'bg-[var(--accent)] text-[#1E1B18]'
+                    : 'bg-[var(--surface-2)] text-[var(--text-dim)] border border-[var(--border)]'
                 }`}
               >
                 {tab.count}

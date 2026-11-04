@@ -311,7 +311,7 @@ export const ProjectMasterView: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[var(--border-soft)]">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--accent)] px-2 py-0.5 rounded bg-[var(--surface-2)] border border-[var(--border)] flex items-center gap-1.5">
+            <span className="badge-accent flex items-center gap-1.5">
               <FolderKanban className="w-3 h-3" />
               <span>Project Management & Scope</span>
             </span>
@@ -366,14 +366,14 @@ export const ProjectMasterView: React.FC = () => {
         <div className="space-y-6">
           {/* Project Quick Selector & Actions Bar */}
           <div className="p-4 rounded-lg bg-[var(--surface)] border border-[var(--border)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0 w-full flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
               <label className="text-xs font-mono font-semibold uppercase text-[var(--text-dim)] shrink-0">
                 Active Project:
               </label>
               <select
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(parseInt(e.target.value, 10))}
-                className="flex-1 p-2.5 rounded bg-[var(--bg)] border border-[var(--border)] text-sm font-medium text-[var(--text)] focus:border-[var(--accent)] outline-none"
+                className="w-full min-w-0 flex-1 p-2.5 rounded bg-[var(--bg)] border border-[var(--border)] text-xs sm:text-sm font-medium text-[var(--text)] focus:border-[var(--accent)] outline-none truncate cursor-pointer"
               >
                 {projects.map((p) => {
                   const cl = getClient(p.client_id);
@@ -388,30 +388,33 @@ export const ProjectMasterView: React.FC = () => {
               </select>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
+                type="button"
                 onClick={() => handleOpenEditProject(currentProject)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-mono rounded bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 <Edit2 className="w-3.5 h-3.5 text-[var(--accent)]" />
                 <span>Edit Project</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsExpenseModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--accent)] text-[#1E1B18] font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-mono rounded bg-[var(--accent)] text-[#1E1B18] font-semibold hover:opacity-90 transition-opacity cursor-pointer shadow-xs shrink-0 whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add Expense</span>
               </button>
 
               <button
+                type="button"
                 onClick={handleExportProjectScopeCSV}
                 title="Download Project Items Scope CSV"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-mono rounded bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)] hover:border-[var(--accent)] transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 <Download className="w-3.5 h-3.5 text-[var(--accent)]" />
-                <span className="hidden sm:inline">Export Scope CSV</span>
+                <span>Export Scope CSV</span>
               </button>
             </div>
           </div>
@@ -424,7 +427,15 @@ export const ProjectMasterView: React.FC = () => {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30">
+                      <span
+                        className={
+                          currentProject.status === 'Active'
+                            ? 'badge-success uppercase'
+                            : currentProject.status === 'Planning'
+                            ? 'badge-warning uppercase'
+                            : 'badge-info uppercase'
+                        }
+                      >
                         {currentProject.status}
                       </span>
                       <span className="text-xs font-mono text-[var(--text-faint)]">
@@ -475,24 +486,19 @@ export const ProjectMasterView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Col 2: Financial Stats Block (Including the new "Pricing" Field!) */}
+              {/* Col 2: Financial Stats Block */}
               <div className="rounded-lg bg-[var(--surface-2)]/40 border border-[var(--border)] p-4 flex flex-col justify-between space-y-4">
                 <div className="space-y-3">
                   <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-faint)] block">
                     Financial Summary & Profitability
                   </span>
 
-                  {/* 1. NEW PRICING FIELD */}
+                  {/* 1. PROJECT PRICING */}
                   <div className="p-3 rounded bg-[var(--surface)] border border-[var(--accent)]/40 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <DollarSign className="w-4 h-4 text-[var(--accent)]" />
-                        <span className="text-xs font-mono font-semibold text-[var(--text)]">
-                          Project Pricing (Contract Value)
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent)] text-[#1E1B18] font-bold">
-                        New Field
+                    <div className="flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4 text-[var(--accent)]" />
+                      <span className="text-xs font-mono font-semibold text-[var(--text)]">
+                        Project Pricing
                       </span>
                     </div>
                     <div className="mt-1 font-mono text-xl sm:text-2xl font-bold text-[var(--accent)]">
@@ -511,7 +517,7 @@ export const ProjectMasterView: React.FC = () => {
 
                     <div className="p-2.5 rounded bg-[var(--bg)] border border-[var(--border)]">
                       <span className="text-[10px] text-[var(--text-faint)] block">Actual Spent</span>
-                      <span className="font-bold text-red-400">
+                      <span className="font-bold text-red-500 dark:text-red-400">
                         {currency} {projectSpent.toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -523,11 +529,11 @@ export const ProjectMasterView: React.FC = () => {
                       <span className="text-[10px] font-mono text-[var(--text-faint)] block">
                         Estimated Margin (Pricing - Spent)
                       </span>
-                      <span className={`font-mono text-xs font-bold ${grossProfitMargin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <span className={`font-mono text-xs font-bold ${grossProfitMargin >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
                         {currency} {grossProfitMargin.toLocaleString('en-IN')}
                       </span>
                     </div>
-                    <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded ${grossProfitMargin >= 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/10 text-red-400'}`}>
+                    <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${grossProfitMargin >= 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/30' : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800/30'}`}>
                       {grossProfitPct.toFixed(1)}% Margin
                     </span>
                   </div>
@@ -736,7 +742,7 @@ export const ProjectMasterView: React.FC = () => {
 
                           {/* 5. Classification */}
                           <td className="py-3.5 px-3">
-                            <span className="text-[11px] font-mono text-[var(--text-dim)] bg-[var(--surface-2)] px-2 py-0.5 rounded border border-[var(--border)]">
+                            <span className="badge-neutral text-[11px]">
                               {typeDesc}
                             </span>
                           </td>
@@ -770,11 +776,11 @@ export const ProjectMasterView: React.FC = () => {
                           {/* 9. Status */}
                           <td className="py-3.5 px-3 text-center">
                             <span
-                              className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                              className={
                                 item.status === 'Active'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/30'
-                              }`}
+                                  ? 'badge-success'
+                                  : 'badge-neutral'
+                              }
                             >
                               {item.status}
                             </span>
@@ -902,7 +908,15 @@ export const ProjectMasterView: React.FC = () => {
                             {currency} {Number(exp.amount).toLocaleString('en-IN')}
                           </td>
                           <td className="p-2.5 text-center">
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-dim)]">
+                            <span
+                              className={
+                                exp.payment_status === 'Paid'
+                                  ? 'badge-success'
+                                  : exp.payment_status === 'Partial'
+                                  ? 'badge-warning'
+                                  : 'badge-danger'
+                              }
+                            >
                               {exp.payment_status}
                             </span>
                           </td>
@@ -998,7 +1012,15 @@ export const ProjectMasterView: React.FC = () => {
                       {/* Top status & Action buttons */}
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div>
-                          <span className="text-[10px] uppercase font-mono tracking-wider px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                          <span
+                            className={
+                              project.status === 'Active'
+                                ? 'badge-success uppercase'
+                                : project.status === 'Planning'
+                                ? 'badge-warning uppercase'
+                                : 'badge-info uppercase'
+                            }
+                          >
                             {project.status}
                           </span>
                           <h3 className="font-display font-medium text-lg text-[var(--text)] mt-1.5">
@@ -1153,12 +1175,20 @@ export const ProjectMasterView: React.FC = () => {
                           {currency} {spent.toLocaleString('en-IN')}
                         </td>
                         <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                          <span
+                            className={
+                              project.status === 'Active'
+                                ? 'badge-success uppercase'
+                                : project.status === 'Planning'
+                                ? 'badge-warning uppercase'
+                                : 'badge-info uppercase'
+                            }
+                          >
                             {project.status}
                           </span>
                         </td>
                         <td className="p-3 text-center font-mono">
-                          <span className="px-2 py-0.5 rounded text-[10px] bg-[var(--bg)] text-[var(--text-dim)] border border-[var(--border)]">
+                          <span className="badge-neutral">
                             {taggedCount} items
                           </span>
                         </td>
@@ -1253,17 +1283,12 @@ export const ProjectMasterView: React.FC = () => {
                 </select>
               </div>
 
-              {/* NEW FIELD: PRICING & APPROVED BUDGET ROW */}
+              {/* PRICING & APPROVED BUDGET ROW */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded bg-[var(--bg)] border border-[var(--border)]">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-mono font-semibold text-[var(--accent)]">
-                      Pricing (₹) *
-                    </label>
-                    <span className="text-[9px] font-mono px-1 py-0.2 bg-[var(--accent)] text-[#1E1B18] font-bold rounded">
-                      New Field
-                    </span>
-                  </div>
+                  <label className="block text-xs font-mono font-semibold text-[var(--accent)] mb-1">
+                    Pricing (₹) *
+                  </label>
                   <input
                     type="number"
                     required

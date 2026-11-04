@@ -627,7 +627,7 @@ export const TeamMasterView: React.FC = () => {
                           <div className="flex items-center gap-2">
                             <h3 className="text-sm font-medium text-[var(--text)]">{member.full_name}</h3>
                             {isSelf && (
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30">
+                              <span className="badge-accent">
                                 You
                               </span>
                             )}
@@ -642,8 +642,8 @@ export const TeamMasterView: React.FC = () => {
                       <span
                         className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                           member.status === 'Active'
-                            ? 'bg-green-950/20 text-green-400 border-green-800/30'
-                            : 'bg-red-950/20 text-red-400 border-red-800/30'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/30'
+                            : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800/30'
                         }`}
                       >
                         {member.status}
@@ -682,7 +682,7 @@ export const TeamMasterView: React.FC = () => {
                           assignedRoles.map((r) => (
                             <span
                               key={r.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono rounded bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]"
+                              className="badge-neutral"
                             >
                               <Shield className="w-2.5 h-2.5 text-[var(--accent)]" />
                               <span>{r.role_name}</span>
@@ -750,7 +750,7 @@ export const TeamMasterView: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <span>{member.full_name}</span>
                           {isSelf && (
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--accent)]/15 text-[var(--accent)] border border-[var(--accent)]/30">
+                            <span className="badge-accent">
                               You
                             </span>
                           )}
@@ -764,7 +764,7 @@ export const TeamMasterView: React.FC = () => {
                           {assignedRoles.map((r) => (
                             <span
                               key={r.id}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono rounded bg-[var(--surface-2)] text-[var(--text)] border border-[var(--border)]"
+                              className="badge-neutral"
                             >
                               <Shield className="w-2.5 h-2.5 text-[var(--accent)]" />
                               <span>{r.role_name}</span>
@@ -776,8 +776,8 @@ export const TeamMasterView: React.FC = () => {
                         <span
                           className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                             member.status === 'Active'
-                              ? 'bg-green-950/20 text-green-400 border-green-800/30'
-                              : 'bg-red-950/20 text-red-400 border-red-800/30'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/30'
+                              : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800/30'
                           }`}
                         >
                           {member.status}
@@ -843,8 +843,8 @@ export const TeamMasterView: React.FC = () => {
                     <span
                       className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
                         role.status === 'Active'
-                          ? 'bg-green-950/20 text-green-400 border-green-800/30'
-                          : 'bg-red-950/20 text-red-400 border-red-800/30'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800/30'
+                          : 'bg-red-50 text-red-700 border-red-300 dark:bg-red-950/30 dark:text-red-400 dark:border-red-800/30'
                       }`}
                     >
                       {role.status}

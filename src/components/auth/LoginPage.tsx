@@ -68,7 +68,7 @@ export const LoginPage: React.FC = () => {
       <div className="max-w-md w-full mx-auto my-auto py-8">
         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-6 sm:p-8 shadow-xl relative">
           <div className="text-center mb-6">
-            <span className="font-mono text-[11px] px-2.5 py-1 rounded bg-[var(--surface-2)] border border-[var(--border)] text-[var(--accent)] font-medium uppercase tracking-wider inline-block mb-2">
+            <span className="badge-accent font-mono text-[10px] px-2.5 py-1 rounded font-semibold uppercase tracking-wider inline-block mb-2">
               Authentication Portal
             </span>
             <h2 className="font-display text-2xl sm:text-3xl font-normal text-[var(--text)]">

@@ -852,13 +852,13 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
                         <td className="py-3 px-3.5">
                           <div className="flex items-center gap-1.5">
                             <span
-                              className={`font-semibold text-[11px] ${
+                              className={
                                 exp.payment_status === 'Paid'
-                                  ? 'text-emerald-600 dark:text-[var(--green)]'
+                                  ? 'badge-success'
                                   : exp.payment_status === 'Partial'
-                                  ? 'text-[var(--accent)]'
-                                  : 'text-red-500 dark:text-[#B5766A]'
-                              }`}
+                                  ? 'badge-warning'
+                                  : 'badge-danger'
+                              }
                             >
                               {exp.payment_status}
                             </span>
@@ -954,7 +954,7 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                        <span className="badge-accent">
                           {cat?.category_name || 'General'}
                         </span>
                         <span className="text-[11px] font-mono text-[var(--text-faint)]">
@@ -1010,9 +1010,22 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
 
                   <div className="mt-4 pt-3 border-t border-[var(--border-soft)] flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] uppercase font-mono text-[var(--text-faint)] block">
-                        {exp.payment_status} ({exp.payment_mode})
-                      </span>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span
+                          className={
+                            exp.payment_status === 'Paid'
+                              ? 'badge-success'
+                              : exp.payment_status === 'Partial'
+                              ? 'badge-warning'
+                              : 'badge-danger'
+                          }
+                        >
+                          {exp.payment_status}
+                        </span>
+                        <span className="font-mono text-[10px] text-[var(--text-faint)]">
+                          {exp.payment_mode}
+                        </span>
+                      </div>
                       <span className="font-mono font-medium text-[var(--accent)] text-base">
                         {currency} {Number(exp.amount).toLocaleString('en-IN')}
                       </span>

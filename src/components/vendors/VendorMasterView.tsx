@@ -197,15 +197,15 @@ export const VendorMasterView: React.FC = () => {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                        <span className="badge-accent">
                           {vendor.vendor_type}
                         </span>
                         <span
-                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                          className={
                             vendor.status === 'Active'
-                              ? 'text-green-400 bg-green-950/30'
-                              : 'text-[var(--text-faint)] bg-[var(--surface-2)]'
-                          }`}
+                              ? 'badge-success'
+                              : 'badge-neutral'
+                          }
                         >
                           {vendor.status}
                         </span>
@@ -304,7 +304,7 @@ export const VendorMasterView: React.FC = () => {
                       </td>
                       <td className="py-3 px-3 text-[var(--text-dim)]">{vendor.contact_person}</td>
                       <td className="py-3 px-3">
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                        <span className="badge-accent">
                           {vendor.vendor_type}
                         </span>
                       </td>
@@ -318,11 +318,11 @@ export const VendorMasterView: React.FC = () => {
                       </td>
                       <td className="py-3 px-3">
                         <span
-                          className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                          className={
                             vendor.status === 'Active'
-                              ? 'text-green-400 bg-green-950/30'
-                              : 'text-[var(--text-faint)] bg-[var(--surface-2)]'
-                          }`}
+                              ? 'badge-success'
+                              : 'badge-neutral'
+                          }
                         >
                           {vendor.status}
                         </span>

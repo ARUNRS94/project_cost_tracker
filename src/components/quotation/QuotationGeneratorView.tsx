@@ -836,7 +836,7 @@ export const QuotationGeneratorView: React.FC = () => {
                     <Building className="w-4 h-4 text-[var(--accent)]" />
                     <span>Select Client *</span>
                   </label>
-                  <span className="text-[11px] font-mono text-[var(--accent)]">
+                  <span className="badge-accent font-mono text-[10px] px-2 py-0.5 rounded font-medium">
                     {clients.length} Clients
                   </span>
                 </div>
@@ -876,7 +876,7 @@ export const QuotationGeneratorView: React.FC = () => {
                     <FolderKanban className="w-4 h-4 text-[var(--accent)]" />
                     <span>Select Project in this Client *</span>
                   </label>
-                  <span className="text-[11px] font-mono text-[var(--accent)]">
+                  <span className="badge-accent font-mono text-[10px] px-2 py-0.5 rounded font-medium">
                     {availableProjects.length} Project{availableProjects.length !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -903,7 +903,13 @@ export const QuotationGeneratorView: React.FC = () => {
                   <div className="space-y-1.5 pt-1 text-xs text-[var(--text-dim)]">
                     <div className="flex justify-between">
                       <span className="text-[10px] uppercase font-mono text-[var(--text-faint)]">Status:</span>
-                      <span className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--surface)] text-[var(--accent)] border border-[var(--border)]">
+                      <span className={`font-mono text-[10px] px-2 py-0.5 rounded font-semibold ${
+                        activeProjectObj.status === 'Active'
+                          ? 'badge-success'
+                          : activeProjectObj.status === 'Planning'
+                          ? 'badge-warning'
+                          : 'badge-info'
+                      }`}>
                         {activeProjectObj.status}
                       </span>
                     </div>
@@ -979,7 +985,7 @@ export const QuotationGeneratorView: React.FC = () => {
                   <h3 className="font-display text-base font-medium text-[var(--text)]">
                     Items in Selected Project
                   </h3>
-                  <span className="font-mono text-xs px-2 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)]">
+                  <span className="font-mono text-xs px-2.5 py-0.5 rounded font-medium badge-accent">
                     {availableItems.length} Available in {projectName || 'Project'}
                   </span>
                 </div>
