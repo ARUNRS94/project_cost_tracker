@@ -3,6 +3,7 @@ import { ERPProvider, useERP } from './context/ERPContext';
 import { Header } from './components/layout/Header';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
 import { ExpenseMasterView } from './components/expenses/ExpenseMasterView';
+import { ProjectMasterView } from './components/projects/ProjectMasterView';
 import { QuotationGeneratorView } from './components/quotation/QuotationGeneratorView';
 import { MastersView, MasterSubTab } from './components/masters/MastersView';
 import { TeamMasterView } from './components/access/TeamMasterView';
@@ -51,15 +52,16 @@ const MainLayout: React.FC = () => {
             onOpenNewExpense={() => setIsNewExpenseModalOpen(true)}
           />
         )}
+        {activeTab === 'projects' && <ProjectMasterView />}
         {activeTab === 'expenses' && <ExpenseMasterView />}
         {activeTab === 'quotation' && <QuotationGeneratorView />}
         {(activeTab === 'masters' ||
-          ['projects', 'clients', 'vendors', 'items', 'categories'].includes(activeTab)) && (
+          ['clients', 'vendors', 'items', 'categories'].includes(activeTab)) && (
           <MastersView
             initialSubTab={
-              ['projects', 'clients', 'vendors', 'items', 'categories'].includes(activeTab)
+              ['clients', 'vendors', 'items', 'categories'].includes(activeTab)
                 ? (activeTab as MasterSubTab)
-                : 'projects'
+                : 'clients'
             }
             onOpenImport={(m) => handleOpenImport(m)}
           />

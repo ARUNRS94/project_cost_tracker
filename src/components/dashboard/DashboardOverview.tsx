@@ -175,7 +175,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenNewE
                   </div>
 
                   <div className="flex justify-between text-[11px] text-[var(--text-faint)] mt-1.5 font-mono">
-                    <span>Status: {p.status}</span>
+                    <span>
+                      Status: {p.status} · Pricing:{' '}
+                      <strong className="text-[var(--accent)]">
+                        {currency} {(p.pricing ?? Math.round(budget * 1.35)).toLocaleString('en-IN')}
+                      </strong>
+                    </span>
                     <span>{pct.toFixed(1)}% burned</span>
                   </div>
                 </div>

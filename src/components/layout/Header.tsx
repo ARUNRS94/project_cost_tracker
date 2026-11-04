@@ -39,6 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   const navTabs: { id: NavTab; label: string; count?: number }[] = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'projects', label: 'Projects', count: projects.length },
     { id: 'expenses', label: 'Expense', count: expenses.length },
     { id: 'quotation', label: 'Generate Quotation', count: quotations.length },
     { id: 'masters', label: 'Masters' },
@@ -115,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Product / Module Tabs matching price-calculator.html */}
         <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto pt-2 scrollbar-none">
           {navTabs.map((tab) => {
-            const isMastersActive = tab.id === 'masters' && ['masters', 'projects', 'clients', 'vendors', 'items', 'categories'].includes(activeTab);
+            const isMastersActive = tab.id === 'masters' && ['masters', 'clients', 'vendors', 'items', 'categories'].includes(activeTab);
             const isActive = activeTab === tab.id || isMastersActive;
             return (
               <button

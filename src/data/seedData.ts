@@ -73,6 +73,7 @@ export const initialProjects: ProjectMaster[] = [
     start_date: '2026-09-01',
     end_date: '2026-12-15',
     approved_budget: 850000,
+    pricing: 1150000,
     status: 'Active',
   },
   {
@@ -83,6 +84,7 @@ export const initialProjects: ProjectMaster[] = [
     start_date: '2026-10-10',
     end_date: '2026-11-20',
     approved_budget: 1400000,
+    pricing: 1850000,
     status: 'Active',
   },
   {
@@ -93,6 +95,7 @@ export const initialProjects: ProjectMaster[] = [
     start_date: '2026-07-15',
     end_date: '2026-10-30',
     approved_budget: 620000,
+    pricing: 780000,
     status: 'Completed',
   },
   {
@@ -103,6 +106,7 @@ export const initialProjects: ProjectMaster[] = [
     start_date: '2026-11-01',
     end_date: '2027-01-25',
     approved_budget: 480000,
+    pricing: 650000,
     status: 'Planning',
   },
 ];

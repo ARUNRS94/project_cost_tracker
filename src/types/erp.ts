@@ -29,6 +29,7 @@ export interface ProjectMaster {
   start_date: string;         // Start date (YYYY-MM-DD)
   end_date: string;           // Expected completion (YYYY-MM-DD)
   approved_budget: number;    // Project budget
+  pricing?: number;           // Pricing / Contract Value in INR (₹)
   status: ProjectStatus;      // Planning / Active / Completed
 }
 

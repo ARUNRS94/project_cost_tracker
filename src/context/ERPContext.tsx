@@ -189,7 +189,17 @@ export const ERPProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Master Data States
   const [clients, setClients] = useState<ClientMaster[]>(() => loadStored('clients', initialClients));
-  const [projects, setProjects] = useState<ProjectMaster[]>(() => loadStored('projects', initialProjects));
+  const [projects, setProjects] = useState<ProjectMaster[]>(() => {
+    const loaded = loadStored('projects', initialProjects);
+    return loaded.map((p: ProjectMaster) => {
+      if (p.pricing !== undefined) return p;
+      const initialMatch = initialProjects.find((ip) => ip.id === p.id);
+      return {
+        ...p,
+        pricing: initialMatch?.pricing ?? Math.round((Number(p.approved_budget) || 0) * 1.35),
+      };
+    });
+  });
   const [itemTypes, setItemTypes] = useState<ItemTypeMaster[]>(() => loadStored('itemTypes', initialItemTypes));
   const [items, setItems] = useState<ItemMaster[]>(() => loadStored('items', initialItems));
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategoryMaster[]>(() =>

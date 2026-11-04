@@ -51,6 +51,7 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
   const {
     expenses,
     projects,
+    clients,
     items,
     expenseCategories,
     vendors,
@@ -70,6 +71,7 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
 
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedClient, setSelectedClient] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedVendor, setSelectedVendor] = useState<string>('all');
@@ -220,6 +222,9 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
           getProject(exp.project_id)?.project_name.toLowerCase().includes(q) ||
           getVendor(exp.vendor_id)?.vendor_name.toLowerCase().includes(q);
 
+        const matchesClient =
+          selectedClient === 'all' ||
+          getProject(exp.project_id)?.client_id === parseInt(selectedClient, 10);
         const matchesProject = selectedProject === 'all' || exp.project_id === parseInt(selectedProject, 10);
         const matchesCat = selectedCategory === 'all' || exp.expense_category_id === parseInt(selectedCategory, 10);
         const matchesVendor = selectedVendor === 'all' || exp.vendor_id === parseInt(selectedVendor, 10);
@@ -242,6 +247,7 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
 
         return (
           matchesSearch &&
+          matchesClient &&
           matchesProject &&
           matchesCat &&
           matchesVendor &&
@@ -571,14 +577,36 @@ export const ExpenseMasterView: React.FC<ExpenseMasterViewProps> = ({
             />
           </div>
 
-          {/* Project Filter */}
+          {/* Client Filter */}
+          <select
+            value={selectedClient}
+            onChange={(e) => {
+              setSelectedClient(e.target.value);
+              setSelectedProject('all');
+            }}
+            className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
+          >
+            <option value="all">All Clients</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.client_name.slice(0, 22)}...
+              </option>
+            ))}
+          </select>
+
+          {/* Project Filter (Filtered by selected client) */}
           <select
             value={selectedProject}
             onChange={(e) => setSelectedProject(e.target.value)}
             className="text-xs bg-[var(--bg)] border border-[var(--border)] rounded px-2.5 py-1.5 text-[var(--text)] outline-none cursor-pointer"
           >
-            <option value="all">All Projects</option>
-            {projects.map((p) => (
+            <option value="all">
+              {selectedClient === 'all' ? 'All Projects' : 'All Projects for Client'}
+            </option>
+            {(selectedClient === 'all'
+              ? projects
+              : projects.filter((p) => p.client_id === parseInt(selectedClient, 10))
+            ).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.project_name.slice(0, 24)}...
               </option>
