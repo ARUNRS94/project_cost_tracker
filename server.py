@@ -249,7 +249,7 @@ def seed_database(conn):
 
     # Seed Users
     users = [
-        ("USR-001", "Arun Ramesh", "arunrameshsusi@gmail.com", "+91 98450 11223", "Managing Director & Principal Architect", "Active", "2025-01-10T09:00:00Z", "2026-11-01T14:30:00Z"),
+        ("USR-001", "Arun Ramesh", "admin@admin.com", "+91 98450 11223", "Managing Director & Principal Architect", "Active", "2025-01-10T09:00:00Z", "2026-11-01T14:30:00Z"),
         ("USR-002", "Kavita Menon", "kavita.m@nexoraerp.com", "+91 98204 88712", "Senior Project Operations Manager", "Active", "2025-03-15T10:15:00Z", "2026-10-25T11:20:00Z"),
         ("USR-003", "Deepak Agrawal", "deepak.finance@nexoraerp.com", "+91 94140 33901", "Chief Financial Controller & Auditor", "Active", "2025-02-01T08:30:00Z", "2026-10-30T17:00:00Z"),
         ("USR-004", "Rohan Salunkhe", "rohan.s@nexoraerp.com", "+91 97699 00814", "Site Operations & Quality Supervisor", "Active", "2025-06-20T11:00:00Z", "2026-11-02T09:15:00Z"),

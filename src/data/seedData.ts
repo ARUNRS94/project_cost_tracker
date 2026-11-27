@@ -313,7 +313,7 @@ export const initialUsers: UserMaster[] = [
   {
     id: 1,
     full_name: 'Arun Ramesh',
-    email: 'arunrameshsusi@gmail.com',
+    email: 'admin@admin.com',
     phone: '+91 98450 11223',
     designation: 'Principal Architect & Director',
     status: 'Active',

@@ -12,8 +12,8 @@ import {
 
 export const LoginPage: React.FC = () => {
   const { users, login, themeMode, toggleThemeMode } = useERP();
-  const [email, setEmail] = useState<string>(users[0]?.email || 'ramesh@projectcode.com');
-  const [password, setPassword] = useState<string>('••••••••');
+  const [email, setEmail] = useState<string>('admin@admin.com');
+  const [password, setPassword] = useState<string>('admin');
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
